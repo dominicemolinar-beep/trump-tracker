@@ -34,6 +34,7 @@ const store = {
   appearances: [],        // All tracked appearances
   signals: [],            // All detected market signals
   truthPosts: [],         // Truth Social posts
+  backfill: null,
   lastPoll: null,
   pollCount: 0,
   errors: [],
@@ -641,6 +642,94 @@ app.get('/api/truthsocial/proxy', async (req, res) => {
   store.truthPosts = store.truthPosts.slice(0, 200);
 
   res.json(posts);
+});
+
+// POST /api/backfill — paginate trump.fm history back to Jan 1 2025, save signal posts
+app.post('/api/backfill', async (req, res) => {
+  res.json({ message: "Backfill started — check /api/backfill/status for progress" });
+
+  const CUTOFF = new Date("2025-01-01T00:00:00Z");
+  let cursor = null;
+  let page = 0;
+  let totalScanned = 0;
+  let totalSignals = 0;
+  let done = false;
+
+  store.backfill = { running: true, page: 0, scanned: 0, signals: 0, done: false, startedAt: new Date().toISOString() };
+
+  while (!done) {
+    try {
+      const url = `https://trump.fm/api/posts?platform=truth&limit=100${cursor ? `&cursor=${cursor}` : ""}`;
+      const r = await axios.get(url, { headers: { "User-Agent": "TrumpSignalTracker/1.0" }, timeout: 15000 });
+      const raw = r.data?.data || r.data?.posts || (Array.isArray(r.data) ? r.data : []);
+      const meta = r.data?.meta;
+
+      if (!raw || raw.length === 0) break;
+
+      page++;
+      let hitsOlderThanCutoff = 0;
+
+      for (const p of raw) {
+        const postDate = new Date(p.createdAt || 0);
+        if (postDate < CUTOFF) { hitsOlderThanCutoff++; continue; }
+
+        const text = (p.content || "").trim();
+        if (!text) continue;
+
+        totalScanned++;
+        const id = p.id || `trump_${p.platformId}`;
+
+        if (store.seenTruthIds.has(id)) continue;
+
+        const date = p.createdAt.split("T")[0];
+        const postUrl = p.platformId ? `https://truthsocial.com/@realDonaldTrump/${p.platformId}` : `https://trump.fm/post/${id}`;
+        const signals = detectSignals(text);
+
+        const post = {
+          id, text, date, createdAt: p.createdAt,
+          url: postUrl,
+          reblogsCount: p.externalMetrics?.reposts || 0,
+          favouritesCount: p.externalMetrics?.likes || 0,
+          repliesCount: p.externalMetrics?.replies || 0,
+          signals, hasSignals: signals.length > 0, topSignal: signals[0] || null,
+        };
+
+        store.seenTruthIds.add(id);
+        store.truthPosts.push(post);
+
+        if (signals.length > 0) {
+          totalSignals++;
+          await saveSignalPost(post);
+          for (const sig of signals) {
+            await recordMention(sig.company, date, text.slice(0, 80));
+          }
+        }
+      }
+
+      // Stop if all posts on this page were older than cutoff, or no next cursor
+      if (hitsOlderThanCutoff === raw.length) { done = true; break; }
+
+      cursor = meta?.nextCursor || meta?.cursor || null;
+      if (!cursor) { done = true; break; }
+
+      store.backfill = { running: true, page, scanned: totalScanned, signals: totalSignals, done: false, startedAt: store.backfill.startedAt };
+
+      // Small delay to be respectful to the API
+      await new Promise(r => setTimeout(r, 300));
+    } catch (e) {
+      console.error(`[Backfill] page ${page} error: ${e.message}`);
+      break;
+    }
+  }
+
+  store.truthPosts = store.truthPosts.slice(0, 1000);
+  store.backfill = { running: false, page, scanned: totalScanned, signals: totalSignals, done: true, startedAt: store.backfill.startedAt, finishedAt: new Date().toISOString() };
+  console.log(`[Backfill] Done — scanned ${totalScanned} posts, found ${totalSignals} with signals`);
+});
+
+// GET /api/backfill/status
+app.get('/api/backfill/status', (req, res) => {
+  res.json(store.backfill || { running: false, done: false });
 });
 
 // GET /api/debug/trumpfm — test trump.fm connectivity
