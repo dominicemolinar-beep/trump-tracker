@@ -539,16 +539,23 @@ export default function App() {
 
           {/* ── SIGNAL BOARD ── */}
           {activeTab === "signals" && (
-            <div className="fadein" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
-              <div>
-                <SectionHead color="#00e87a">🚀 BUY SIGNALS</SectionHead>
-                {buySignals.length === 0 && <Empty>No buy signals detected yet</Empty>}
-                {buySignals.map((s, i) => <SignalRow key={i} signal={s} />)}
+            <div className="fadein">
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24, marginBottom: 24 }}>
+                <div>
+                  <SectionHead color="#00e87a">🚀 BUY SIGNALS</SectionHead>
+                  {buySignals.length === 0 && <Empty>No buy signals detected yet</Empty>}
+                  {buySignals.map((s, i) => <SignalRow key={i} signal={s} />)}
+                </div>
+                <div>
+                  <SectionHead color="#ef4444">🚫 AVOID SIGNALS</SectionHead>
+                  {avoidSignals.length === 0 && <Empty>No avoid signals detected yet</Empty>}
+                  {avoidSignals.map((s, i) => <SignalRow key={i} signal={s} />)}
+                </div>
               </div>
               <div>
-                <SectionHead color="#ef4444">🚫 AVOID SIGNALS</SectionHead>
-                {avoidSignals.length === 0 && <Empty>No avoid signals detected yet</Empty>}
-                {avoidSignals.map((s, i) => <SignalRow key={i} signal={s} />)}
+                <SectionHead color={C.gold}>✦ ALL SIGNALS</SectionHead>
+                {(signals || []).length === 0 && <Empty>No signals detected yet</Empty>}
+                {(signals || []).map((s, i) => <SignalRow key={i} signal={s} />)}
               </div>
             </div>
           )}
