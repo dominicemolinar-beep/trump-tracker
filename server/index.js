@@ -770,6 +770,28 @@ app.get('/api/debug/truthsocial', async (req, res) => {
   }
 });
 
+// POST /api/debug/reprice — re-fetch historical prices for all saved signal posts
+app.post('/api/debug/reprice', async (req, res) => {
+  const { Pool } = require('pg');
+  if (!process.env.DATABASE_URL) return res.json({ error: 'DATABASE_URL not set' });
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+
+  // Clear old mention prices
+  await pool.query('DELETE FROM mention_prices');
+  Object.keys(mentionPriceStore).forEach(k => delete mentionPriceStore[k]);
+
+  const posts = await loadSignalPosts();
+  res.json({ message: `Repricing ${posts.length} signal posts in background` });
+
+  for (const post of posts) {
+    const signals = detectSignals(post.text);
+    for (const sig of signals) {
+      await recordMention(sig.company, post.date, post.text.slice(0, 80));
+    }
+  }
+  console.log(`[Reprice] Done — repriced ${posts.length} posts`);
+});
+
 // DELETE /api/debug/mention-prices — clear stale mention prices so backfill can re-fetch correct historical ones
 app.delete('/api/debug/mention-prices', async (req, res) => {
   try {
