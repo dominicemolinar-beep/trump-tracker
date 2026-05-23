@@ -32,10 +32,12 @@ const anthropic = new Anthropic({ apiKey: ANTHROPIC_API_KEY });
 const store = {
   appearances: [],        // All tracked appearances
   signals: [],            // All detected market signals
+  truthPosts: [],         // Truth Social posts
   lastPoll: null,
   pollCount: 0,
   errors: [],
   seenUrls: new Set(),    // Dedup: don't re-scan the same transcript
+  seenTruthIds: new Set(),
 };
 
 // ─── Signal detection patterns ──────────────────────────────────────────────
@@ -221,6 +223,88 @@ async function fetchTranscriptText(url) {
   }
 }
 
+// Source 3: Truth Social (Mastodon-compatible public API)
+let trumpTruthAccountId = null;
+
+async function getTrumpTruthAccountId() {
+  if (trumpTruthAccountId) return trumpTruthAccountId;
+  try {
+    const res = await axios.get("https://truthsocial.com/api/v1/accounts/lookup?acct=realDonaldTrump", {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; TrumpTracker/1.0)" },
+      timeout: 10000,
+    });
+    trumpTruthAccountId = res.data?.id;
+    return trumpTruthAccountId;
+  } catch (e) {
+    store.errors.push({ time: new Date().toISOString(), source: "TruthSocial", error: e.message });
+    return null;
+  }
+}
+
+async function scrapeTruthSocial() {
+  const found = [];
+  try {
+    const accountId = await getTrumpTruthAccountId();
+    if (!accountId) return found;
+
+    const res = await axios.get(`https://truthsocial.com/api/v1/accounts/${accountId}/statuses?limit=20&exclude_replies=true`, {
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; TrumpTracker/1.0)" },
+      timeout: 10000,
+    });
+
+    for (const post of res.data || []) {
+      if (store.seenTruthIds.has(post.id)) continue;
+      store.seenTruthIds.add(post.id);
+
+      // Strip HTML tags from content
+      const text = (post.content || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (!text || text.length < 10) continue;
+
+      const signals = detectSignals(text);
+      const date = post.created_at ? post.created_at.split("T")[0] : new Date().toISOString().split("T")[0];
+
+      let aiSummary = null;
+      if (signals.length > 0) {
+        aiSummary = await analyzeWithClaude("Truth Social Post", date, text, signals);
+        for (const sig of signals) {
+          store.signals.unshift({
+            id: `sig_truth_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+            appearanceId: `truth_${post.id}`,
+            appearanceTitle: text.slice(0, 80),
+            date,
+            ...sig,
+          });
+          await recordMention(sig.company, date, text.slice(0, 80));
+        }
+      }
+
+      found.push({
+        id: `truth_${post.id}`,
+        truthId: post.id,
+        text,
+        date,
+        createdAt: post.created_at,
+        url: post.url || `https://truthsocial.com/@realDonaldTrump/${post.id}`,
+        reblogsCount: post.reblogs_count || 0,
+        favouritesCount: post.favourites_count || 0,
+        repliesCount: post.replies_count || 0,
+        signals,
+        aiSummary,
+        hasSignals: signals.length > 0,
+      });
+    }
+
+    if (found.length > 0) {
+      store.truthPosts.unshift(...found);
+      store.truthPosts = store.truthPosts.slice(0, 200); // keep latest 200
+      console.log(`  📣 Truth Social: ${found.length} new posts`);
+    }
+  } catch (e) {
+    store.errors.push({ time: new Date().toISOString(), source: "TruthSocial", error: e.message });
+  }
+  return found;
+}
+
 // ─── Main poll cycle ─────────────────────────────────────────────────────────
 async function pollForNewTranscripts() {
   console.log(`[${new Date().toISOString()}] Polling for new Trump transcripts...`);
@@ -230,6 +314,7 @@ async function pollForNewTranscripts() {
   const [revItems, senateItems] = await Promise.all([
     scrapeRevCom(),
     scrapeSenateTranscripts(),
+    scrapeTruthSocial(),
   ]);
 
   const allItems = [...revItems, ...senateItems];
@@ -445,6 +530,12 @@ app.post("/api/scan", async (req, res) => {
   res.json(appearance);
 });
 
+
+// GET /api/truthsocial — Trump's Truth Social posts
+app.get('/api/truthsocial', (req, res) => {
+  const { limit = 50 } = req.query;
+  res.json(store.truthPosts.slice(0, Number(limit)));
+});
 
 // GET /api/debug/finnhub — test Finnhub connectivity
 app.get('/api/debug/finnhub', async (req, res) => {

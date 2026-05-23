@@ -141,6 +141,81 @@ function AppearanceCard({ appearance }) {
   );
 }
 
+function TruthPostCard({ post }) {
+  const [open, setOpen] = useState(false);
+  const hasSignals = post.signals && post.signals.length > 0;
+  const topSig = post.signals?.[0];
+  const cfg = topSig ? (SENTIMENT_CFG[topSig.sentiment] || SENTIMENT_CFG.NEUTRAL) : null;
+
+  return (
+    <div style={{
+      background: C.surface,
+      border: `1px solid ${cfg ? cfg.color + "33" : C.border}`,
+      borderLeft: `3px solid ${cfg ? cfg.color : C.borderLt}`,
+      borderRadius: 10, padding: "14px 18px", marginBottom: 10, cursor: hasSignals ? "pointer" : "default",
+    }} onClick={() => hasSignals && setOpen(!open)}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <div style={{ width: 28, height: 28, borderRadius: "50%", background: `linear-gradient(135deg,${C.gold},#8a6e10)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, flexShrink: 0 }}>🇺🇸</div>
+            <div>
+              <div style={{ fontSize: 12, color: C.text, fontWeight: 600 }}>Donald J. Trump</div>
+              <div style={{ fontSize: 10, color: C.textMute, fontFamily: "monospace" }}>
+                @realDonaldTrump · {post.date}
+                {post.createdAt && <> · {new Date(post.createdAt).toLocaleTimeString()}</>}
+              </div>
+            </div>
+          </div>
+          <div style={{ fontSize: 14, color: C.text, lineHeight: 1.7, marginBottom: 8 }}>{post.text}</div>
+          <div style={{ display: "flex", gap: 16, fontSize: 11, color: C.textMute, fontFamily: "monospace" }}>
+            <span>🔁 {post.reblogsCount.toLocaleString()}</span>
+            <span>❤️ {post.favouritesCount.toLocaleString()}</span>
+            <span>💬 {post.repliesCount.toLocaleString()}</span>
+            <a href={post.url} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}
+              style={{ color: C.textFaint, textDecoration: "none", marginLeft: "auto" }}>
+              View on Truth Social →
+            </a>
+          </div>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 6, flexShrink: 0 }}>
+          {post.signals.slice(0, 3).map((s, i) => <Badge key={i} sentiment={s.sentiment} />)}
+          {hasSignals && <span style={{ color: C.textMute, fontSize: 12 }}>{open ? "▲" : "▼"}</span>}
+        </div>
+      </div>
+
+      {open && hasSignals && (
+        <div style={{ marginTop: 14, borderTop: `1px solid ${C.border}`, paddingTop: 14 }}>
+          {post.aiSummary && (
+            <div style={{ background: C.bg, border: `1px solid ${C.border}`, borderLeft: `3px solid ${C.gold}`, borderRadius: 8, padding: 14, marginBottom: 14 }}>
+              <div style={{ fontSize: 10, color: C.gold, letterSpacing: 2, fontFamily: "monospace", marginBottom: 8 }}>✦ AI ANALYSIS</div>
+              <div style={{ fontSize: 12, color: C.textSub, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>{post.aiSummary}</div>
+            </div>
+          )}
+          {post.signals.map((sig, i) => {
+            const scfg = SENTIMENT_CFG[sig.sentiment] || SENTIMENT_CFG.NEUTRAL;
+            return (
+              <div key={i} style={{ marginBottom: 10, background: scfg.bg, border: `1px solid ${scfg.color}22`, borderRadius: 8, padding: "10px 12px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 16, color: scfg.color, letterSpacing: 1 }}>{sig.company}</span>
+                    <Badge sentiment={sig.sentiment} />
+                  </div>
+                  <span style={{ color: scfg.color, fontFamily: "monospace", fontSize: 13, fontWeight: 700 }}>
+                    {sig.score > 0 ? "+" : ""}{sig.score}
+                  </span>
+                </div>
+                {sig.hits.map((hit, j) => (
+                  <div key={j} style={{ fontSize: 12, color: C.textMute, fontStyle: "italic", marginTop: 4 }}>"{hit.quote}"</div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DigestRow({ entry, rank }) {
   const isUp = entry.direction === "up";
   const noData = entry.pctChange === null;
@@ -226,6 +301,7 @@ export default function App() {
   const { data: appearances, loading: appLoading, refetch: refetchApps } = useFetch(`${API}/api/appearances?limit=50`, 20000);
   const { data: signals } = useFetch(`${API}/api/signals?limit=100`, 20000);
   const { data: companies } = useFetch(`${API}/api/companies`, 30000);
+  const { data: truthPosts, loading: truthLoading } = useFetch(`${API}/api/truthsocial`, 30000);
 
   const buySignals = (signals || []).filter(s => s.sentiment === "STRONG_BUY" || s.sentiment === "BUY");
   const avoidSignals = (signals || []).filter(s => s.sentiment === "AVOID" || s.sentiment === "NEGATIVE");
@@ -348,6 +424,7 @@ export default function App() {
           <div style={{ display: "flex", gap: 4, marginBottom: 24, background: C.surface, borderRadius: 10, padding: 4, border: `1px solid ${C.border}`, width: "fit-content" }}>
             {[
               { id: "live",      label: "📡 Live Feed" },
+              { id: "truth",     label: "📣 Truth Social" },
               { id: "digest",    label: "📈 Daily Digest" },
               { id: "signals",   label: "📊 Signal Board" },
               { id: "companies", label: "🏢 Companies" },
@@ -370,6 +447,24 @@ export default function App() {
                   <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, letterSpacing: 2 }}>WAITING FOR TRANSCRIPTS</div>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* ── TRUTH SOCIAL ── */}
+          {activeTab === "truth" && (
+            <div className="fadein">
+              <div style={{ fontSize: 11, color: C.textMute, fontFamily: "monospace", letterSpacing: 1, marginBottom: 16 }}>
+                {(truthPosts || []).length} POSTS FETCHED · AUTO-REFRESHES EVERY 30s · REAL-TIME TRUMP TRUTH SOCIAL
+              </div>
+              {truthLoading && <div style={{ color: C.textMute, fontFamily: "monospace", fontSize: 13 }}>Loading Truth Social posts...</div>}
+              {(truthPosts || []).length === 0 && !truthLoading && (
+                <div style={{ color: C.textMute, textAlign: "center", padding: "60px 0" }}>
+                  <div style={{ fontSize: 32, marginBottom: 12 }}>📣</div>
+                  <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, letterSpacing: 2 }}>NO POSTS YET</div>
+                  <div style={{ fontSize: 12, color: C.textFaint, marginTop: 8 }}>Truth Social posts will appear here after the next poll</div>
+                </div>
+              )}
+              {(truthPosts || []).map(post => <TruthPostCard key={post.id} post={post} />)}
             </div>
           )}
 
