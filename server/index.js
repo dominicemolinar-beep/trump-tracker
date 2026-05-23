@@ -425,6 +425,21 @@ app.post("/api/scan", async (req, res) => {
 });
 
 
+// GET /api/debug/finnhub — test Finnhub connectivity
+app.get('/api/debug/finnhub', async (req, res) => {
+  const axios = require('axios');
+  const key = process.env.FINNHUB_API_KEY;
+  if (!key) return res.json({ error: 'FINNHUB_API_KEY not set', env: Object.keys(process.env).filter(k => k.includes('FINN')) });
+  try {
+    const quoteRes = await axios.get(`https://finnhub.io/api/v1/quote?symbol=AAPL&token=${key}`, { timeout: 8000 });
+    const now = Math.floor(Date.now() / 1000);
+    const candleRes = await axios.get(`https://finnhub.io/api/v1/stock/candle?symbol=AAPL&resolution=D&from=${now - 86400 * 5}&to=${now}&token=${key}`, { timeout: 8000 });
+    res.json({ keyPresent: true, keyPrefix: key.slice(0,6)+'...', quote: quoteRes.data, candle: candleRes.data });
+  } catch(e) {
+    res.json({ error: e.message, status: e.response?.status, data: e.response?.data });
+  }
+});
+
 // GET /api/digest — daily digest: all mentioned companies with stock price comparison
 app.get('/api/digest', async (req, res) => {
   try {
