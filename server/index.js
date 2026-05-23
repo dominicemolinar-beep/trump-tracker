@@ -581,82 +581,62 @@ app.get('/api/truthsocial', (req, res) => {
   res.json(store.truthPosts.slice(0, Number(limit)));
 });
 
-// GET /api/truthsocial/proxy — scrape Trump's social media posts from Factbase
+// GET /api/truthsocial/proxy — fetch Trump's posts from trump.fm API
 app.get('/api/truthsocial/proxy', async (req, res) => {
-  const headers = { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", "Accept": "text/html,application/xhtml+xml" };
-
-  const SOURCES = [
-    "https://factba.se/topic/social-media",
-    "https://factba.se/topic/truth-social",
-  ];
-
   let posts = [];
 
-  for (const url of SOURCES) {
-    if (posts.length > 0) break;
-    try {
-      const r = await axios.get(url, { headers, timeout: 15000 });
-      const $ = cheerio.load(r.data);
+  try {
+    const r = await axios.get("https://trump.fm/api/posts?platform=truth&limit=40", {
+      headers: { "User-Agent": "TrumpSignalTracker/1.0" },
+      timeout: 10000,
+    });
 
-      $(".row, .transcript-item, .card, article, .statement, [class*='statement'], [class*='post'], [class*='truth']").each((i, el) => {
-        const text = $(el).find("p, .text, .body, .content").first().text().replace(/\s+/g, " ").trim()
-          || $(el).text().replace(/\s+/g, " ").trim();
-        const dateStr = $(el).find("time, .date, [datetime]").attr("datetime")
-          || $(el).find("time, .date").text().trim();
-        const link = $(el).find("a").attr("href") || "";
-        const fullLink = link.startsWith("http") ? link : `https://factba.se${link}`;
+    const raw = r.data?.posts || r.data || [];
+    for (const p of raw) {
+      const text = (p.content || "").trim();
+      if (!text || text.length < 5) continue;
 
-        if (text && text.length > 20 && text.length < 5000) {
-          const id = `fact_${Buffer.from(text.slice(0, 40)).toString("base64").slice(0, 16)}`;
-          if (!store.seenTruthIds.has(id)) {
-            const date = dateStr ? dateStr.split("T")[0] : new Date().toISOString().split("T")[0];
-            const signals = detectSignals(text);
-            posts.push({ id, text, date, createdAt: dateStr || null, url: fullLink, reblogsCount: 0, favouritesCount: 0, repliesCount: 0, signals, hasSignals: signals.length > 0, topSignal: signals[0] || null });
-          }
-        }
+      const id = p.id || `trump_${p.platformId}`;
+      const date = p.createdAt ? p.createdAt.split("T")[0] : new Date().toISOString().split("T")[0];
+      const url = p.platformId
+        ? `https://truthsocial.com/@realDonaldTrump/${p.platformId}`
+        : `https://trump.fm/post/${id}`;
+      const signals = detectSignals(text);
+
+      posts.push({
+        id,
+        text,
+        date,
+        createdAt: p.createdAt || null,
+        url,
+        reblogsCount: p.externalMetrics?.reposts || 0,
+        favouritesCount: p.externalMetrics?.likes || 0,
+        repliesCount: p.externalMetrics?.replies || 0,
+        signals,
+        hasSignals: signals.length > 0,
+        topSignal: signals[0] || null,
       });
-    } catch (e) {
-      console.error(`[Factbase scrape] ${url}: ${e.message}`);
     }
-  }
-
-  // Fallback: try the RSS feed
-  if (posts.length === 0) {
-    try {
-      const r = await axios.get("https://truthsocial.com/@realDonaldTrump.rss", { headers: { ...headers, "Accept": "application/rss+xml, text/xml" }, timeout: 10000 });
-      const $ = cheerio.load(r.data, { xmlMode: true });
-      $("item").each((i, el) => {
-        const text = $(el).find("description").text().replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-        const dateStr = $(el).find("pubDate").text().trim();
-        const link = $(el).find("link").text().trim();
-        const id = `rss_${$(el).find("guid").text().trim().slice(-16)}`;
-        if (text && text.length > 10 && !store.seenTruthIds.has(id)) {
-          const date = dateStr ? new Date(dateStr).toISOString().split("T")[0] : new Date().toISOString().split("T")[0];
-          const signals = detectSignals(text);
-          posts.push({ id, text, date, createdAt: dateStr || null, url: link, reblogsCount: 0, favouritesCount: 0, repliesCount: 0, signals, hasSignals: signals.length > 0, topSignal: signals[0] || null });
-        }
-      });
-    } catch (e) {
-      console.error(`[RSS fallback] ${e.message}`);
-    }
+    console.log(`[trump.fm] Fetched ${posts.length} posts`);
+  } catch (e) {
+    console.error(`[trump.fm] ${e.message}`);
   }
 
   if (posts.length === 0) {
-    // Return cached signal posts from DB rather than an error
     const cached = store.truthPosts.filter(p => p.hasSignals);
-    if (cached.length > 0) {
-      return res.json({ cached: true, posts: cached });
-    }
-    return res.json({ error: "Could not load posts from any source. All data providers appear to be blocking server requests." });
+    if (cached.length > 0) return res.json({ cached: true, posts: cached });
+    return res.json({ error: "Could not load posts from trump.fm. Try again shortly." });
   }
 
   for (const post of posts) {
-    store.seenTruthIds.add(post.id);
-    store.truthPosts.unshift(post);
-    for (const sig of post.signals) {
-      await recordMention(sig.company, post.date, post.text.slice(0, 80));
+    if (!store.seenTruthIds.has(post.id)) {
+      store.seenTruthIds.add(post.id);
+      store.truthPosts.unshift(post);
+      for (const sig of post.signals) {
+        await recordMention(sig.company, post.date, post.text.slice(0, 80));
+      }
+      if (post.hasSignals) await saveSignalPost(post);
     }
-    if (post.hasSignals) await saveSignalPost(post);
   }
   store.truthPosts = store.truthPosts.slice(0, 200);
 
