@@ -6,8 +6,6 @@
  */
 
 const axios = require("axios");
-const yahooFinanceModule = require("yahoo-finance2");
-const yahooFinance = new yahooFinanceModule.default({ suppressNotices: ["ripHistorical"] });
 const { saveMentionPrice, loadMentionPrices } = require("./db");
 
 const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
@@ -101,35 +99,42 @@ async function fetchCurrentPrice(ticker) {
 }
 
 /**
- * Fetch historical closing price on a specific date (YYYY-MM-DD) via Yahoo Finance.
- * Falls back to nearest available trading day within a week.
+ * Fetch historical closing price on a specific date (YYYY-MM-DD) via Stooq.
+ * Falls back to scanning ±5 trading days to handle weekends/holidays.
  */
 async function fetchPriceOnDate(ticker, dateStr) {
+  // Try a 7-day window around the target date
+  const date = new Date(dateStr + "T12:00:00Z");
+  const d1 = new Date(date.getTime() - 86400 * 5 * 1000);
+  const d2 = new Date(date.getTime() + 86400 * 2 * 1000);
+  const fmt = d => d.toISOString().slice(0,10).replace(/-/g,"");
+
   try {
-    const date = new Date(dateStr + "T12:00:00Z");
-    const from = new Date(date.getTime() - 86400 * 4 * 1000); // 4 days before
-    const to   = new Date(date.getTime() + 86400 * 4 * 1000); // 4 days after
-
-    const result = await yahooFinance.historical(ticker, {
-      period1: from.toISOString().split("T")[0],
-      period2: to.toISOString().split("T")[0],
-      interval: "1d",
+    const url = `https://stooq.com/q/d/l/?s=${ticker.toLowerCase()}.us&d1=${fmt(d1)}&d2=${fmt(d2)}&i=d`;
+    const { data } = await axios.get(url, {
+      timeout: 10000,
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; TrumpTracker/1.0)" },
     });
 
-    if (!result || result.length === 0) return null;
+    // Response is CSV: Date,Open,High,Low,Close,Volume
+    const lines = data.trim().split("\n").slice(1).filter(l => l.trim());
+    if (!lines.length) return null;
 
-    // Find the closest date to the target
     const target = date.getTime();
-    const closest = result.reduce((best, row) => {
-      const diff = Math.abs(new Date(row.date).getTime() - target);
-      const bestDiff = Math.abs(new Date(best.date).getTime() - target);
-      return diff < bestDiff ? row : best;
-    });
+    let closest = null;
+    let closestDiff = Infinity;
 
-    console.log(`  [Yahoo historical] ${ticker} ${dateStr}: $${closest.close}`);
-    return Number(closest.close.toFixed(2));
+    for (const line of lines) {
+      const [rowDate,,,,close] = line.split(",");
+      if (!close || isNaN(Number(close))) continue;
+      const diff = Math.abs(new Date(rowDate).getTime() - target);
+      if (diff < closestDiff) { closestDiff = diff; closest = Number(parseFloat(close).toFixed(2)); }
+    }
+
+    if (closest) console.log(`  [Stooq historical] ${ticker} ${dateStr}: $${closest}`);
+    return closest;
   } catch (e) {
-    console.error(`  [Yahoo historical error] ${ticker} ${dateStr}: ${e.message}`);
+    console.error(`  [Stooq historical error] ${ticker} ${dateStr}: ${e.message}`);
     return null;
   }
 }
