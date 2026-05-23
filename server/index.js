@@ -15,7 +15,7 @@ const cheerio = require("cheerio");
 const cron = require("node-cron");
 const cors = require("cors");
 const Anthropic = require("@anthropic-ai/sdk");
-const { recordMention, buildDailyDigest, getTicker } = require("./stocks");
+const { recordMention, buildDailyDigest, getTicker, mentionPriceStore } = require("./stocks");
 
 const app = express();
 app.use(cors());
@@ -325,6 +325,16 @@ async function seedDemoData() {
     },
   ];
 
+  // Historical prices at time of demo speeches (hardcoded — candle API requires paid plan)
+  const historicalPrices = {
+    "Tesla":        { date: "2025-11-14", price: 328.50 },
+    "Nvidia":       { date: "2025-11-14", price: 147.20 },
+    "Ford":         { date: "2025-11-14", price: 10.89 },
+    "Boeing":       { date: "2025-12-03", price: 157.40 },
+    "Goldman Sachs":{ date: "2025-12-03", price: 594.00 },
+    "Target":       { date: "2025-12-03", price: 129.50 },
+  };
+
   for (const d of demos) {
     store.appearances.push(d);
     store.seenUrls.add(d.url);
@@ -336,7 +346,17 @@ async function seedDemoData() {
         date: d.date,
         ...sig,
       });
-      await recordMention(sig.company, d.date, d.title);
+      // Seed historical price directly instead of calling API
+      const hist = historicalPrices[sig.company];
+      if (hist && !mentionPriceStore[sig.company]) {
+        mentionPriceStore[sig.company] = {
+          ticker: getTicker(sig.company),
+          company: sig.company,
+          firstMentionDate: hist.date,
+          firstMentionSpeech: d.title,
+          firstMentionPrice: hist.price,
+        };
+      }
     }
   }
 }

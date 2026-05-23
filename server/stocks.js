@@ -130,8 +130,8 @@ async function recordMention(company, date, speechTitle) {
   if (!ticker) return; // No ticker for this company (e.g. SpaceX, OpenAI)
 
   if (!mentionPriceStore[company]) {
-    // First time — fetch historical price for that date
-    const price = await fetchPriceOnDate(ticker, date);
+    // Use current market price at time of mention (historical candles require paid plan)
+    const price = await fetchCurrentPrice(ticker);
     mentionPriceStore[company] = {
       ticker,
       company,
@@ -150,9 +150,9 @@ async function buildDailyDigest() {
   const entries = [];
 
   for (const [company, record] of Object.entries(mentionPriceStore)) {
-    // Retry first-mention price if it never loaded
+    // Retry first-mention price if it never loaded (e.g. market was closed at mention time)
     if (!record.firstMentionPrice) {
-      const retried = await fetchPriceOnDate(record.ticker, record.firstMentionDate);
+      const retried = await fetchCurrentPrice(record.ticker);
       if (retried) record.firstMentionPrice = retried;
     }
 
