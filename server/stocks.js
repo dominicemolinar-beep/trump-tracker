@@ -106,9 +106,9 @@ async function fetchCurrentPrice(ticker) {
 async function fetchPriceOnDate(ticker, dateStr) {
   if (!ALPHA_VANTAGE_KEY) return null;
   try {
-    const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${ticker}&outputsize=full&apikey=${ALPHA_VANTAGE_KEY}`;
+    const url = `https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY&symbol=${ticker}&apikey=${ALPHA_VANTAGE_KEY}`;
     const { data } = await axios.get(url, { timeout: 15000 });
-    const series = data["Time Series (Daily)"];
+    const series = data["Weekly Time Series"];
     if (!series) return null;
 
     const target = new Date(dateStr + "T12:00:00Z").getTime();
@@ -117,13 +117,13 @@ async function fetchPriceOnDate(ticker, dateStr) {
 
     for (const [rowDate, values] of Object.entries(series)) {
       const diff = Math.abs(new Date(rowDate).getTime() - target);
-      if (diff < closestDiff && diff <= 86400 * 7 * 1000) {
+      if (diff < closestDiff && diff <= 86400 * 10 * 1000) {
         closestDiff = diff;
         closest = Number(parseFloat(values["4. close"]).toFixed(2));
       }
     }
 
-    if (closest) console.log(`  [AlphaVantage] ${ticker} ${dateStr}: $${closest}`);
+    if (closest) console.log(`  [AlphaVantage weekly] ${ticker} ${dateStr}: $${closest}`);
     return closest;
   } catch (e) {
     console.error(`  [AlphaVantage error] ${ticker} ${dateStr}: ${e.message}`);
