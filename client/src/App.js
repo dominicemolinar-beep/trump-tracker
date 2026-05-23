@@ -301,7 +301,9 @@ export default function App() {
   const { data: appearances, loading: appLoading, refetch: refetchApps } = useFetch(`${API}/api/appearances?limit=50`, 20000);
   const { data: signals } = useFetch(`${API}/api/signals?limit=100`, 20000);
   const { data: companies } = useFetch(`${API}/api/companies`, 30000);
-  const { data: truthPosts, loading: truthLoading } = useFetch(`${API}/api/truthsocial`, 30000);
+  const [truthPosts, setTruthPosts] = useState([]);
+  const [truthLoading, setTruthLoading] = useState(true);
+  const [truthError, setTruthError] = useState(null);
 
   const buySignals = (signals || []).filter(s => s.sentiment === "STRONG_BUY" || s.sentiment === "BUY");
   const avoidSignals = (signals || []).filter(s => s.sentiment === "AVOID" || s.sentiment === "NEGATIVE");
@@ -322,6 +324,46 @@ export default function App() {
   useEffect(() => {
     if (activeTab === "digest") loadDigest();
   }, [activeTab]);
+
+  const fetchTruthPosts = useCallback(async () => {
+    setTruthLoading(true);
+    setTruthError(null);
+    try {
+      const lookupRes = await fetch("https://truthsocial.com/api/v1/accounts/lookup?acct=realDonaldTrump");
+      if (!lookupRes.ok) throw new Error(`Lookup failed: ${lookupRes.status}`);
+      const account = await lookupRes.json();
+      const id = account?.id;
+      if (!id) throw new Error("Could not find account ID");
+      const postsRes = await fetch(`https://truthsocial.com/api/v1/accounts/${id}/statuses?limit=40&exclude_replies=true`);
+      if (!postsRes.ok) throw new Error(`Posts failed: ${postsRes.status}`);
+      const posts = await postsRes.json();
+      setTruthPosts(posts.map(p => ({
+        id: p.id,
+        text: (p.content || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(),
+        date: p.created_at ? p.created_at.split("T")[0] : "",
+        createdAt: p.created_at,
+        url: p.url || `https://truthsocial.com/@realDonaldTrump/${p.id}`,
+        reblogsCount: p.reblogs_count || 0,
+        favouritesCount: p.favourites_count || 0,
+        repliesCount: p.replies_count || 0,
+        signals: [],
+        aiSummary: null,
+        hasSignals: false,
+      })));
+    } catch (e) {
+      setTruthError(e.message);
+    } finally {
+      setTruthLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "truth") {
+      fetchTruthPosts();
+      const t = setInterval(fetchTruthPosts, 60000);
+      return () => clearInterval(t);
+    }
+  }, [activeTab, fetchTruthPosts]);
 
   async function triggerPoll() {
     setTriggering(true);
@@ -453,18 +495,32 @@ export default function App() {
           {/* ── TRUTH SOCIAL ── */}
           {activeTab === "truth" && (
             <div className="fadein">
-              <div style={{ fontSize: 11, color: C.textMute, fontFamily: "monospace", letterSpacing: 1, marginBottom: 16 }}>
-                {(truthPosts || []).length} POSTS FETCHED · AUTO-REFRESHES EVERY 30s · REAL-TIME TRUMP TRUTH SOCIAL
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <div style={{ fontSize: 11, color: C.textMute, fontFamily: "monospace", letterSpacing: 1 }}>
+                  {truthPosts.length} POSTS FETCHED · AUTO-REFRESHES EVERY 60s · @realDonaldTrump
+                </div>
+                <button onClick={fetchTruthPosts} disabled={truthLoading} style={{
+                  padding: "6px 14px", borderRadius: 6, border: `1px solid ${C.gold}`,
+                  background: "transparent", color: truthLoading ? C.textMute : C.gold,
+                  fontSize: 12, cursor: truthLoading ? "not-allowed" : "pointer", fontFamily: "monospace",
+                }}>
+                  {truthLoading ? "⏳ Loading..." : "🔄 Refresh"}
+                </button>
               </div>
-              {truthLoading && <div style={{ color: C.textMute, fontFamily: "monospace", fontSize: 13 }}>Loading Truth Social posts...</div>}
-              {(truthPosts || []).length === 0 && !truthLoading && (
+              {truthLoading && <div style={{ color: C.textMute, fontFamily: "monospace", fontSize: 13 }}>Fetching Truth Social posts...</div>}
+              {truthError && (
+                <div style={{ background: "#1a0810", border: "1px solid #ef444433", borderRadius: 10, padding: "16px 20px", marginBottom: 20 }}>
+                  <div style={{ fontSize: 13, color: "#ef4444", fontFamily: "monospace" }}>⚠ Could not load Truth Social: {truthError}</div>
+                  <div style={{ fontSize: 12, color: C.textMute, marginTop: 6 }}>Truth Social may be blocking this request. Try refreshing.</div>
+                </div>
+              )}
+              {truthPosts.length === 0 && !truthLoading && !truthError && (
                 <div style={{ color: C.textMute, textAlign: "center", padding: "60px 0" }}>
                   <div style={{ fontSize: 32, marginBottom: 12 }}>📣</div>
                   <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, letterSpacing: 2 }}>NO POSTS YET</div>
-                  <div style={{ fontSize: 12, color: C.textFaint, marginTop: 8 }}>Truth Social posts will appear here after the next poll</div>
                 </div>
               )}
-              {(truthPosts || []).map(post => <TruthPostCard key={post.id} post={post} />)}
+              {truthPosts.map(post => <TruthPostCard key={post.id} post={post} />)}
             </div>
           )}
 
