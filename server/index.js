@@ -531,10 +531,74 @@ app.post("/api/scan", async (req, res) => {
 });
 
 
-// GET /api/truthsocial — Trump's Truth Social posts
+// GET /api/truthsocial — Trump's Truth Social posts (cached)
 app.get('/api/truthsocial', (req, res) => {
   const { limit = 50 } = req.query;
   res.json(store.truthPosts.slice(0, Number(limit)));
+});
+
+// GET /api/truthsocial/proxy — fetch live posts, run signal detection, return to client
+app.get('/api/truthsocial/proxy', async (req, res) => {
+  const PROXIES = [
+    (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+    (url) => url, // direct as last resort
+  ];
+
+  const headers = { "User-Agent": "Mozilla/5.0 (compatible; TrumpTracker/1.0)", "Accept": "application/json" };
+
+  let accountId = null;
+  for (const proxy of PROXIES) {
+    try {
+      const r = await axios.get(proxy("https://truthsocial.com/api/v1/accounts/lookup?acct=realDonaldTrump"), { headers, timeout: 10000 });
+      if (r.data?.id) { accountId = r.data.id; break; }
+    } catch {}
+  }
+
+  if (!accountId) return res.json({ error: "Could not reach Truth Social. The platform may be blocking all server requests." });
+
+  let rawPosts = [];
+  for (const proxy of PROXIES) {
+    try {
+      const r = await axios.get(proxy(`https://truthsocial.com/api/v1/accounts/${accountId}/statuses?limit=40&exclude_replies=true`), { headers, timeout: 10000 });
+      if (Array.isArray(r.data) && r.data.length > 0) { rawPosts = r.data; break; }
+    } catch {}
+  }
+
+  if (rawPosts.length === 0) return res.json({ error: "Fetched account but could not load posts." });
+
+  const posts = rawPosts.map(p => {
+    const text = (p.content || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    const signals = detectSignals(text);
+    const date = p.created_at ? p.created_at.split("T")[0] : new Date().toISOString().split("T")[0];
+    return {
+      id: `truth_${p.id}`,
+      text,
+      date,
+      createdAt: p.created_at,
+      url: p.url || `https://truthsocial.com/@realDonaldTrump/${p.id}`,
+      reblogsCount: p.reblogs_count || 0,
+      favouritesCount: p.favourites_count || 0,
+      repliesCount: p.replies_count || 0,
+      signals,
+      hasSignals: signals.length > 0,
+      topSignal: signals[0] || null,
+    };
+  });
+
+  // Cache results and record any new mentions
+  for (const post of posts) {
+    if (!store.seenTruthIds.has(post.id)) {
+      store.seenTruthIds.add(post.id);
+      store.truthPosts.unshift(post);
+      for (const sig of post.signals) {
+        await recordMention(sig.company, post.date, post.text.slice(0, 80));
+      }
+    }
+  }
+  store.truthPosts = store.truthPosts.slice(0, 200);
+
+  res.json(posts);
 });
 
 // GET /api/debug/truthsocial — test Truth Social connectivity

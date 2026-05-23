@@ -328,34 +328,19 @@ export default function App() {
   const fetchTruthPosts = useCallback(async () => {
     setTruthLoading(true);
     setTruthError(null);
+    // Route through backend proxy to avoid Truth Social IP/CORS blocks
     try {
-      const lookupRes = await fetch("https://truthsocial.com/api/v1/accounts/lookup?acct=realDonaldTrump");
-      if (!lookupRes.ok) throw new Error(`Lookup failed: ${lookupRes.status}`);
-      const account = await lookupRes.json();
-      const id = account?.id;
-      if (!id) throw new Error("Could not find account ID");
-      const postsRes = await fetch(`https://truthsocial.com/api/v1/accounts/${id}/statuses?limit=40&exclude_replies=true`);
-      if (!postsRes.ok) throw new Error(`Posts failed: ${postsRes.status}`);
-      const posts = await postsRes.json();
-      setTruthPosts(posts.map(p => ({
-        id: p.id,
-        text: (p.content || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim(),
-        date: p.created_at ? p.created_at.split("T")[0] : "",
-        createdAt: p.created_at,
-        url: p.url || `https://truthsocial.com/@realDonaldTrump/${p.id}`,
-        reblogsCount: p.reblogs_count || 0,
-        favouritesCount: p.favourites_count || 0,
-        repliesCount: p.replies_count || 0,
-        signals: [],
-        aiSummary: null,
-        hasSignals: false,
-      })));
+      const res = await fetch(`${API}/api/truthsocial/proxy`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const posts = await res.json();
+      if (posts.error) throw new Error(posts.error);
+      setTruthPosts(posts);
     } catch (e) {
       setTruthError(e.message);
     } finally {
       setTruthLoading(false);
     }
-  }, []);
+  }, [API]);
 
   useEffect(() => {
     if (activeTab === "truth") {
