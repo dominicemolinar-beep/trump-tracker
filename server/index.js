@@ -641,6 +641,10 @@ app.get('/api/truthsocial/proxy', async (req, res) => {
       store.truthPosts.unshift(post);
       for (const sig of post.signals) {
         await recordMention(sig.company, post.date, post.text.slice(0, 80));
+        const sigId = `sig_ts_${post.id}_${sig.company}`;
+        if (!store.signals.find(s => s.id === sigId)) {
+          store.signals.unshift({ id: sigId, appearanceId: post.id, appearanceTitle: post.text.slice(0, 80), date: post.date, source: "Truth Social", ...sig });
+        }
       }
       if (post.hasSignals) await saveSignalPost(post);
     }
@@ -891,12 +895,27 @@ async function start() {
   await initDb();
   await restoreMentionPrices();
 
-  // Restore saved Truth Social signal posts
+  // Restore saved Truth Social signal posts and push their signals into the live store
   const savedPosts = await loadSignalPosts();
   for (const post of savedPosts) {
     if (!store.seenTruthIds.has(post.id)) {
       store.seenTruthIds.add(post.id);
       store.truthPosts.push(post);
+    }
+    // Always ensure signals are in store.signals (even if post was already seen)
+    const signals = Array.isArray(post.signals) ? post.signals : [];
+    for (const sig of signals) {
+      const sigId = `sig_ts_${post.id}_${sig.company}`;
+      if (!store.signals.find(s => s.id === sigId)) {
+        store.signals.push({
+          id: sigId,
+          appearanceId: post.id,
+          appearanceTitle: post.text.slice(0, 80),
+          date: post.date,
+          source: "Truth Social",
+          ...sig,
+        });
+      }
     }
   }
   if (savedPosts.length > 0) console.log(`[DB] Restored ${savedPosts.length} Truth Social signal posts.`);
