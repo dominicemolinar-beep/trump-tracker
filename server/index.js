@@ -822,14 +822,14 @@ app.delete('/api/debug/mention-prices', async (req, res) => {
   }
 });
 
-// GET /api/debug/yahoo — test Yahoo Finance historical price fetch
+// GET /api/debug/yahoo — test Alpha Vantage historical price fetch
 app.get('/api/debug/yahoo', async (req, res) => {
   try {
     const { fetchPriceOnDate } = require('./stocks');
     const price = await fetchPriceOnDate('AMZN', '2025-12-06');
-    res.json({ ticker: 'AMZN', date: '2025-12-06', price });
+    res.json({ ticker: 'AMZN', date: '2025-12-06', price, keySet: !!process.env.ALPHA_VANTAGE_KEY });
   } catch (e) {
-    res.json({ error: e.message, type: e.constructor?.name, stack: e.stack?.slice(0, 1000) });
+    res.json({ error: e.message, type: e.constructor?.name });
   }
 });
 

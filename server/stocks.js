@@ -9,6 +9,7 @@ const axios = require("axios");
 const { saveMentionPrice, loadMentionPrices } = require("./db");
 
 const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
+const ALPHA_VANTAGE_KEY = process.env.ALPHA_VANTAGE_KEY;
 
 // ─── Company → Ticker map ─────────────────────────────────────────────────────
 const TICKER_MAP = {
@@ -99,42 +100,33 @@ async function fetchCurrentPrice(ticker) {
 }
 
 /**
- * Fetch historical closing price on a specific date (YYYY-MM-DD) via Stooq.
- * Falls back to scanning ±5 trading days to handle weekends/holidays.
+ * Fetch historical closing price on a specific date (YYYY-MM-DD) via Alpha Vantage.
+ * Uses daily adjusted endpoint; finds nearest trading day within ±7 days.
  */
 async function fetchPriceOnDate(ticker, dateStr) {
-  // Try a 7-day window around the target date
-  const date = new Date(dateStr + "T12:00:00Z");
-  const d1 = new Date(date.getTime() - 86400 * 5 * 1000);
-  const d2 = new Date(date.getTime() + 86400 * 2 * 1000);
-  const fmt = d => d.toISOString().slice(0,10).replace(/-/g,"");
-
+  if (!ALPHA_VANTAGE_KEY) return null;
   try {
-    const url = `https://stooq.com/q/d/l/?s=${ticker.toLowerCase()}.us&d1=${fmt(d1)}&d2=${fmt(d2)}&i=d`;
-    const { data } = await axios.get(url, {
-      timeout: 10000,
-      headers: { "User-Agent": "Mozilla/5.0 (compatible; TrumpTracker/1.0)" },
-    });
+    const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${ticker}&outputsize=compact&apikey=${ALPHA_VANTAGE_KEY}`;
+    const { data } = await axios.get(url, { timeout: 15000 });
+    const series = data["Time Series (Daily)"];
+    if (!series) return null;
 
-    // Response is CSV: Date,Open,High,Low,Close,Volume
-    const lines = data.trim().split("\n").slice(1).filter(l => l.trim());
-    if (!lines.length) return null;
-
-    const target = date.getTime();
+    const target = new Date(dateStr + "T12:00:00Z").getTime();
     let closest = null;
     let closestDiff = Infinity;
 
-    for (const line of lines) {
-      const [rowDate,,,,close] = line.split(",");
-      if (!close || isNaN(Number(close))) continue;
+    for (const [rowDate, values] of Object.entries(series)) {
       const diff = Math.abs(new Date(rowDate).getTime() - target);
-      if (diff < closestDiff) { closestDiff = diff; closest = Number(parseFloat(close).toFixed(2)); }
+      if (diff < closestDiff && diff <= 86400 * 7 * 1000) {
+        closestDiff = diff;
+        closest = Number(parseFloat(values["4. close"]).toFixed(2));
+      }
     }
 
-    if (closest) console.log(`  [Stooq historical] ${ticker} ${dateStr}: $${closest}`);
+    if (closest) console.log(`  [AlphaVantage] ${ticker} ${dateStr}: $${closest}`);
     return closest;
   } catch (e) {
-    console.error(`  [Stooq historical error] ${ticker} ${dateStr}: ${e.message}`);
+    console.error(`  [AlphaVantage error] ${ticker} ${dateStr}: ${e.message}`);
     return null;
   }
 }
