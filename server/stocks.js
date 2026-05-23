@@ -6,8 +6,8 @@
  */
 
 const axios = require("axios");
-const { YahooFinance } = require("yahoo-finance2");
-const yahooFinance = new YahooFinance();
+const yahooFinanceModule = require("yahoo-finance2");
+const yahooFinance = new yahooFinanceModule.default({ suppressNotices: ["ripHistorical"] });
 const { saveMentionPrice, loadMentionPrices } = require("./db");
 
 const FINNHUB_KEY = process.env.FINNHUB_API_KEY;

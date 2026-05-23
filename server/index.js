@@ -811,8 +811,8 @@ app.delete('/api/debug/mention-prices', async (req, res) => {
 // GET /api/debug/yahoo — test Yahoo Finance historical price fetch
 app.get('/api/debug/yahoo', async (req, res) => {
   try {
-    const { YahooFinance } = require('yahoo-finance2');
-    const yahooFinance = new YahooFinance();
+    const yahooFinanceModule = require('yahoo-finance2');
+    const yahooFinance = new yahooFinanceModule.default({ suppressNotices: ['ripHistorical'] });
     const result = await yahooFinance.historical('AMZN', {
       period1: '2025-12-03',
       period2: '2025-12-10',
