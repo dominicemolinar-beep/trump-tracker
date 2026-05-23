@@ -106,7 +106,7 @@ async function fetchCurrentPrice(ticker) {
 async function fetchPriceOnDate(ticker, dateStr) {
   if (!ALPHA_VANTAGE_KEY) return null;
   try {
-    const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${ticker}&outputsize=compact&apikey=${ALPHA_VANTAGE_KEY}`;
+    const url = `https://www.alphavantage.co/query?function=TIME_SERIES_DAILY&symbol=${ticker}&outputsize=full&apikey=${ALPHA_VANTAGE_KEY}`;
     const { data } = await axios.get(url, { timeout: 15000 });
     const series = data["Time Series (Daily)"];
     if (!series) return null;
