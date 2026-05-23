@@ -84,12 +84,23 @@ function detectSignals(text) {
       const lowerSentence = sentence.toLowerCase();
       if (!lowerSentence.includes(lowerCompany)) return;
 
+      // Phrases where a negative word refers to a political figure, not a company
+      const POLITICAL_NOISE = [
+        "crooked joe", "crooked hillary", "crooked biden", "crooked obama",
+        "sleepy joe", "sleepy/crooked", "crooked/sleepy", "failing new york times",
+        "failing nyt", "fake news", "corrupt media", "corrupt press",
+        "disaster of a president", "disaster joe", "terrible president",
+        "horrible president", "do not buy fake",
+      ];
+      const hasPoliticalNoise = POLITICAL_NOISE.some(p => lowerSentence.includes(p));
+
       SIGNAL_PATTERNS.forEach(({ type, patterns, weight }) => {
         patterns.forEach((pattern) => {
-          if (lowerSentence.includes(pattern)) {
-            score += weight;
-            hits.push({ type, pattern, quote: sentence.trim() });
-          }
+          if (!lowerSentence.includes(pattern)) return;
+          // Skip negative patterns that are part of a political nickname/phrase
+          if (weight < 0 && hasPoliticalNoise) return;
+          score += weight;
+          hits.push({ type, pattern, quote: sentence.trim() });
         });
       });
     });
