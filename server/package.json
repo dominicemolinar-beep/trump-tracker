@@ -1,0 +1,21 @@
+{
+  "name": "trump-tracker-server",
+  "version": "1.0.0",
+  "description": "Trump speech tracker - polls transcripts and scans for market signals",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "cheerio": "^1.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "node-cron": "^3.0.3",
+    "@anthropic-ai/sdk": "^0.24.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
