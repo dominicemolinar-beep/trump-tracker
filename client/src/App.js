@@ -347,6 +347,9 @@ export default function App() {
   }, [activeTab]);
 
   const [truthCached, setTruthCached] = useState(false);
+  const [truthSubTab, setTruthSubTab] = useState("feed");
+  const [taggedPosts, setTaggedPosts] = useState([]);
+  const [taggedLoading, setTaggedLoading] = useState(false);
 
   const fetchTruthPosts = useCallback(async () => {
     setTruthLoading(true);
@@ -377,6 +380,17 @@ export default function App() {
       return () => clearInterval(t);
     }
   }, [activeTab, fetchTruthPosts]);
+
+  useEffect(() => {
+    if (activeTab === "truth" && truthSubTab === "tagged") {
+      setTaggedLoading(true);
+      fetch(`${API}/api/truthsocial`)
+        .then(r => r.json())
+        .then(data => { setTaggedPosts(Array.isArray(data) ? data.filter(p => p.hasSignals) : []); })
+        .catch(() => {})
+        .finally(() => setTaggedLoading(false));
+    }
+  }, [activeTab, truthSubTab, API]);
 
   async function triggerPoll() {
     setTriggering(true);
@@ -519,9 +533,21 @@ export default function App() {
           {/* ── TRUTH SOCIAL ── */}
           {activeTab === "truth" && (
             <div className="fadein">
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                <div style={{ fontSize: 11, color: C.textMute, fontFamily: "monospace", letterSpacing: 1 }}>
-                  {truthPosts.length} POSTS FETCHED · AUTO-REFRESHES EVERY 60s · @realDonaldTrump
+
+              {/* Sub-tab bar */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+                <div style={{ display: "flex", gap: 4, background: C.bg, borderRadius: 8, padding: 4, border: `1px solid ${C.border}` }}>
+                  {[
+                    { id: "feed",   label: "📡 Live Feed" },
+                    { id: "tagged", label: "🏷 Tagged Posts" },
+                  ].map(t => (
+                    <button key={t.id} onClick={() => setTruthSubTab(t.id)} style={{
+                      padding: "6px 16px", borderRadius: 5, fontSize: 12, border: "none",
+                      background: truthSubTab === t.id ? C.gold : "transparent",
+                      color: truthSubTab === t.id ? "#06111f" : C.textSub,
+                      cursor: "pointer", fontFamily: "system-ui", fontWeight: 500, transition: "all 0.15s",
+                    }}>{t.label}</button>
+                  ))}
                 </div>
                 <button onClick={fetchTruthPosts} disabled={truthLoading} style={{
                   padding: "6px 14px", borderRadius: 6, border: `1px solid ${C.gold}`,
@@ -531,25 +557,53 @@ export default function App() {
                   {truthLoading ? "⏳ Loading..." : "🔄 Refresh"}
                 </button>
               </div>
-              {truthLoading && <div style={{ color: C.textMute, fontFamily: "monospace", fontSize: 13 }}>Fetching Truth Social posts...</div>}
-              {truthCached && (
-                <div style={{ background: C.raised, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 16px", marginBottom: 16, fontSize: 12, color: C.textMute, fontFamily: "monospace" }}>
-                  ⚠ Live feed unavailable — showing saved signal posts from database. Refresh to retry.
+
+              {/* Live Feed sub-tab */}
+              {truthSubTab === "feed" && (
+                <div>
+                  <div style={{ fontSize: 11, color: C.textMute, fontFamily: "monospace", letterSpacing: 1, marginBottom: 14 }}>
+                    {truthPosts.length} POSTS · AUTO-REFRESHES EVERY 60s · @realDonaldTrump
+                  </div>
+                  {truthLoading && <div style={{ color: C.textMute, fontFamily: "monospace", fontSize: 13 }}>Fetching Truth Social posts...</div>}
+                  {truthCached && (
+                    <div style={{ background: C.raised, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 16px", marginBottom: 16, fontSize: 12, color: C.textMute, fontFamily: "monospace" }}>
+                      ⚠ Live feed unavailable — showing saved signal posts from database. Refresh to retry.
+                    </div>
+                  )}
+                  {truthError && (
+                    <div style={{ background: "#1a0810", border: "1px solid #ef444433", borderRadius: 10, padding: "16px 20px", marginBottom: 20 }}>
+                      <div style={{ fontSize: 13, color: "#ef4444", fontFamily: "monospace" }}>⚠ Could not load Truth Social: {truthError}</div>
+                      <div style={{ fontSize: 12, color: C.textMute, marginTop: 6 }}>Truth Social may be blocking this request. Try refreshing.</div>
+                    </div>
+                  )}
+                  {truthPosts.length === 0 && !truthLoading && !truthError && (
+                    <div style={{ color: C.textMute, textAlign: "center", padding: "60px 0" }}>
+                      <div style={{ fontSize: 32, marginBottom: 12 }}>📣</div>
+                      <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, letterSpacing: 2 }}>NO POSTS YET</div>
+                    </div>
+                  )}
+                  {truthPosts.map(post => <TruthPostCard key={post.id} post={post} />)}
                 </div>
               )}
-              {truthError && (
-                <div style={{ background: "#1a0810", border: "1px solid #ef444433", borderRadius: 10, padding: "16px 20px", marginBottom: 20 }}>
-                  <div style={{ fontSize: 13, color: "#ef4444", fontFamily: "monospace" }}>⚠ Could not load Truth Social: {truthError}</div>
-                  <div style={{ fontSize: 12, color: C.textMute, marginTop: 6 }}>Truth Social may be blocking this request. Try refreshing.</div>
+
+              {/* Tagged Posts sub-tab */}
+              {truthSubTab === "tagged" && (
+                <div>
+                  <div style={{ fontSize: 11, color: C.textMute, fontFamily: "monospace", letterSpacing: 1, marginBottom: 14 }}>
+                    {taggedPosts.length} TAGGED POSTS · SAVED TO DATABASE · COMPANY SIGNALS DETECTED
+                  </div>
+                  {taggedLoading && <div style={{ color: C.textMute, fontFamily: "monospace", fontSize: 13 }}>Loading tagged posts...</div>}
+                  {taggedPosts.length === 0 && !taggedLoading && (
+                    <div style={{ color: C.textMute, textAlign: "center", padding: "60px 0" }}>
+                      <div style={{ fontSize: 32, marginBottom: 12 }}>🏷</div>
+                      <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, letterSpacing: 2 }}>NO TAGGED POSTS YET</div>
+                      <div style={{ fontSize: 12, color: C.textFaint, marginTop: 8 }}>Posts where Trump mentions companies will appear here and be saved permanently</div>
+                    </div>
+                  )}
+                  {taggedPosts.map(post => <TruthPostCard key={post.id} post={post} />)}
                 </div>
               )}
-              {truthPosts.length === 0 && !truthLoading && !truthError && (
-                <div style={{ color: C.textMute, textAlign: "center", padding: "60px 0" }}>
-                  <div style={{ fontSize: 32, marginBottom: 12 }}>📣</div>
-                  <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 20, letterSpacing: 2 }}>NO POSTS YET</div>
-                </div>
-              )}
-              {truthPosts.map(post => <TruthPostCard key={post.id} post={post} />)}
+
             </div>
           )}
 
