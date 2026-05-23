@@ -384,9 +384,9 @@ export default function App() {
   useEffect(() => {
     if (activeTab === "truth" && truthSubTab === "tagged") {
       setTaggedLoading(true);
-      fetch(`${API}/api/truthsocial`)
+      fetch(`${API}/api/truthsocial/tagged`)
         .then(r => r.json())
-        .then(data => { setTaggedPosts(Array.isArray(data) ? data.filter(p => p.hasSignals) : []); })
+        .then(data => { setTaggedPosts(Array.isArray(data) ? data : []); })
         .catch(() => {})
         .finally(() => setTaggedLoading(false));
     }

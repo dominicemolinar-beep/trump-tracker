@@ -582,6 +582,12 @@ app.get('/api/truthsocial', (req, res) => {
   res.json(store.truthPosts.slice(0, Number(limit)));
 });
 
+// GET /api/truthsocial/tagged — signal posts from database
+app.get('/api/truthsocial/tagged', async (req, res) => {
+  const posts = await loadSignalPosts();
+  res.json(posts);
+});
+
 // GET /api/truthsocial/proxy — fetch Trump's posts from trump.fm API
 app.get('/api/truthsocial/proxy', async (req, res) => {
   let posts = [];
