@@ -346,16 +346,23 @@ export default function App() {
     if (activeTab === "digest") loadDigest();
   }, [activeTab]);
 
+  const [truthCached, setTruthCached] = useState(false);
+
   const fetchTruthPosts = useCallback(async () => {
     setTruthLoading(true);
     setTruthError(null);
-    // Route through backend proxy to avoid Truth Social IP/CORS blocks
+    setTruthCached(false);
     try {
       const res = await fetch(`${API}/api/truthsocial/proxy`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const posts = await res.json();
-      if (posts.error) throw new Error(posts.error);
-      setTruthPosts(posts);
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+      if (data.cached) {
+        setTruthCached(true);
+        setTruthPosts(data.posts);
+      } else {
+        setTruthPosts(Array.isArray(data) ? data : []);
+      }
     } catch (e) {
       setTruthError(e.message);
     } finally {
@@ -525,6 +532,11 @@ export default function App() {
                 </button>
               </div>
               {truthLoading && <div style={{ color: C.textMute, fontFamily: "monospace", fontSize: 13 }}>Fetching Truth Social posts...</div>}
+              {truthCached && (
+                <div style={{ background: C.raised, border: `1px solid ${C.border}`, borderRadius: 10, padding: "12px 16px", marginBottom: 16, fontSize: 12, color: C.textMute, fontFamily: "monospace" }}>
+                  ⚠ Live feed unavailable — showing saved signal posts from database. Refresh to retry.
+                </div>
+              )}
               {truthError && (
                 <div style={{ background: "#1a0810", border: "1px solid #ef444433", borderRadius: 10, padding: "16px 20px", marginBottom: 20 }}>
                   <div style={{ fontSize: 13, color: "#ef4444", fontFamily: "monospace" }}>⚠ Could not load Truth Social: {truthError}</div>

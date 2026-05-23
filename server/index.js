@@ -641,7 +641,14 @@ app.get('/api/truthsocial/proxy', async (req, res) => {
     }
   }
 
-  if (posts.length === 0) return res.json({ error: "Could not load posts from any source. All data providers appear to be blocking server requests." });
+  if (posts.length === 0) {
+    // Return cached signal posts from DB rather than an error
+    const cached = store.truthPosts.filter(p => p.hasSignals);
+    if (cached.length > 0) {
+      return res.json({ cached: true, posts: cached });
+    }
+    return res.json({ error: "Could not load posts from any source. All data providers appear to be blocking server requests." });
+  }
 
   for (const post of posts) {
     store.seenTruthIds.add(post.id);
