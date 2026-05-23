@@ -68,16 +68,29 @@ function Badge({ sentiment }) {
   );
 }
 
-function AppearanceCard({ appearance }) {
+function AppearanceCard({ appearance, onDelete }) {
   const [open, setOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const top = appearance.topSignal;
   const cfg = top ? (SENTIMENT_CFG[top.sentiment] || SENTIMENT_CFG.NEUTRAL) : null;
+  const isManual = appearance.id?.startsWith("manual_");
+
+  async function handleDelete(e) {
+    e.stopPropagation();
+    if (!window.confirm("Remove this entry?")) return;
+    setDeleting(true);
+    try {
+      await fetch(`${API}/api/appearances/${appearance.id}`, { method: "DELETE" });
+      onDelete && onDelete(appearance.id);
+    } catch { setDeleting(false); }
+  }
 
   return (
     <div style={{
       background: C.surface, border: `1px solid ${cfg ? cfg.color + "33" : C.border}`,
       borderLeft: `3px solid ${cfg ? cfg.color : C.gold}`,
       borderRadius: 10, padding: "14px 18px", marginBottom: 10, cursor: "pointer",
+      opacity: deleting ? 0.4 : 1, transition: "opacity 0.2s",
     }} onClick={() => setOpen(!open)}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -98,6 +111,12 @@ function AppearanceCard({ appearance }) {
             <span style={{ fontSize: 11, color: C.textMute }}>+{appearance.signals.length - 3}</span>
           )}
           <span style={{ color: C.textMute, fontSize: 12 }}>{open ? "▲" : "▼"}</span>
+          {isManual && (
+            <button onClick={handleDelete} title="Remove entry" style={{
+              background: "transparent", border: `1px solid #ef444444`, borderRadius: 4,
+              color: "#ef4444", fontSize: 11, padding: "2px 7px", cursor: "pointer", fontFamily: "monospace",
+            }}>✕</button>
+          )}
         </div>
       </div>
 
@@ -294,6 +313,7 @@ export default function App() {
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState(null);
   const [scanErrors, setScanErrors] = useState({});
+  const [deletedIds, setDeletedIds] = useState(new Set());
   const [triggering, setTriggering] = useState(false);
   const [digestLoading, setDigestLoading] = useState(false);
   const [digestData, setDigestData] = useState(null);
@@ -477,7 +497,9 @@ export default function App() {
                 {status?.lastPoll && <> · LAST POLL: {new Date(status.lastPoll).toLocaleTimeString()}</>}
               </div>
               {appLoading && <div style={{ color: C.textMute, fontFamily: "monospace", fontSize: 13 }}>Loading appearances...</div>}
-              {(appearances || []).map(a => <AppearanceCard key={a.id} appearance={a} />)}
+              {(appearances || []).filter(a => !deletedIds.has(a.id)).map(a => (
+                <AppearanceCard key={a.id} appearance={a} onDelete={id => setDeletedIds(s => new Set([...s, id]))} />
+              ))}
               {!appLoading && (appearances || []).length === 0 && (
                 <div style={{ color: C.textMute, textAlign: "center", padding: "60px 0" }}>
                   <div style={{ fontSize: 32, marginBottom: 12 }}>📡</div>

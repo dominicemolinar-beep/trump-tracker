@@ -503,7 +503,29 @@ app.post("/api/poll", async (req, res) => {
 // POST /api/scan — manually submit transcript text for scanning
 app.post("/api/scan", async (req, res) => {
   const { title, date, text, url } = req.body;
-  if (!text || text.length < 100) return res.status(400).json({ error: "Text too short" });
+  if (!text || text.length < 50) return res.status(400).json({ error: "Text too short" });
+
+  // AI authenticity gate — reject submissions that aren't genuine Trump content
+  if (ANTHROPIC_API_KEY) {
+    try {
+      const check = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 100,
+        messages: [{
+          role: "user",
+          content: `Is the following text a genuine Donald Trump speech, statement, press conference, or Truth Social post? Reply with exactly one word: AUTHENTIC or INAUTHENTIC, then a dash, then one sentence explaining why.\n\nText: "${text.slice(0, 1000)}"`,
+        }],
+      });
+      const verdict = check.content[0].text.trim();
+      if (verdict.toUpperCase().startsWith("INAUTHENTIC")) {
+        const reason = verdict.split("-").slice(1).join("-").trim() || "Content does not appear to be genuine Trump speech or posts.";
+        return res.status(422).json({ error: `Blocked: ${reason}` });
+      }
+    } catch (e) {
+      // If AI check fails, allow through rather than blocking all submissions
+      console.warn("Authenticity check failed, allowing through:", e.message);
+    }
+  }
 
   const signals = detectSignals(text);
   const aiSummary = signals.length > 0 ? await analyzeWithClaude(title || "Manual Submission", date || new Date().toISOString().split("T")[0], text, signals) : null;
@@ -528,6 +550,27 @@ app.post("/api/scan", async (req, res) => {
   });
 
   res.json(appearance);
+});
+
+// DELETE /api/appearances/:id — remove a specific appearance and its signals
+app.delete("/api/appearances/:id", (req, res) => {
+  const { id } = req.params;
+  const before = store.appearances.length;
+  store.appearances = store.appearances.filter(a => a.id !== id);
+  store.signals = store.signals.filter(s => s.appearanceId !== id);
+  if (store.appearances.length < before) {
+    res.json({ deleted: true });
+  } else {
+    res.status(404).json({ error: "Appearance not found" });
+  }
+});
+
+// DELETE /api/appearances/manual/all — remove all manual entries
+app.delete("/api/appearances/manual/all", (req, res) => {
+  const manualIds = store.appearances.filter(a => a.id.startsWith("manual_")).map(a => a.id);
+  store.appearances = store.appearances.filter(a => !a.id.startsWith("manual_"));
+  store.signals = store.signals.filter(s => !manualIds.includes(s.appearanceId));
+  res.json({ deleted: manualIds.length });
 });
 
 
