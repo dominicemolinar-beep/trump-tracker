@@ -532,7 +532,7 @@ export default function App() {
         <div style={{ borderTop: `1px solid ${C.border}`, padding: "14px 32px", marginTop: 20 }}>
           <div style={{ maxWidth: 1300, margin: "0 auto", display: "flex", justifyContent: "space-between" }}>
             <span style={{ fontSize: 10, color: C.textFaint, fontFamily: "monospace" }}>FOR INFORMATIONAL USE ONLY · NOT FINANCIAL ADVICE</span>
-            <span style={{ fontSize: 10, color: C.textFaint, fontFamily: "monospace" }}>Sources: Rev.com · Factbase · Yahoo Finance · Claude AI</span>
+            <span style={{ fontSize: 10, color: C.textFaint, fontFamily: "monospace" }}>Created by Dominic Molinar</span>
           </div>
         </div>
       </div>
