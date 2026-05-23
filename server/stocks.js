@@ -6,6 +6,7 @@
  */
 
 const axios = require("axios");
+const yahooFinance = require("yahoo-finance2").default;
 const { saveMentionPrice, loadMentionPrices } = require("./db");
 
 const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
@@ -99,25 +100,35 @@ async function fetchCurrentPrice(ticker) {
 }
 
 /**
- * Fetch historical price on a specific date (YYYY-MM-DD).
- * Falls back to nearest available trading day.
+ * Fetch historical closing price on a specific date (YYYY-MM-DD) via Yahoo Finance.
+ * Falls back to nearest available trading day within a week.
  */
 async function fetchPriceOnDate(ticker, dateStr) {
   try {
-    const date = new Date(dateStr);
-    // Search 3 days before to 7 days after to catch weekends/holidays
-    const from = Math.floor((date.getTime() - 86400 * 3 * 1000) / 1000);
-    const to = Math.floor((date.getTime() + 86400 * 7 * 1000) / 1000);
+    const date = new Date(dateStr + "T12:00:00Z");
+    const from = new Date(date.getTime() - 86400 * 4 * 1000); // 4 days before
+    const to   = new Date(date.getTime() + 86400 * 4 * 1000); // 4 days after
 
-    const url = `https://finnhub.io/api/v1/stock/candle?symbol=${ticker}&resolution=D&from=${from}&to=${to}&token=${FINNHUB_KEY}`;
-    const { data } = await axios.get(url, { timeout: 8000 });
+    const result = await yahooFinance.historical(ticker, {
+      period1: from.toISOString().split("T")[0],
+      period2: to.toISOString().split("T")[0],
+      interval: "1d",
+    });
 
-    console.log(`  [Finnhub candle] ${ticker} ${dateStr}: status=${data?.s} closes=${JSON.stringify(data?.c?.slice(0,2))}`);
+    if (!result || result.length === 0) return null;
 
-    if (!data || data.s !== "ok" || !data.c || data.c.length === 0) return null;
-    return Number(data.c[0].toFixed(2));
+    // Find the closest date to the target
+    const target = date.getTime();
+    const closest = result.reduce((best, row) => {
+      const diff = Math.abs(new Date(row.date).getTime() - target);
+      const bestDiff = Math.abs(new Date(best.date).getTime() - target);
+      return diff < bestDiff ? row : best;
+    });
+
+    console.log(`  [Yahoo historical] ${ticker} ${dateStr}: $${closest.close}`);
+    return Number(closest.close.toFixed(2));
   } catch (e) {
-    console.error(`  [Finnhub candle error] ${ticker} ${dateStr}: ${e.message}`);
+    console.error(`  [Yahoo historical error] ${ticker} ${dateStr}: ${e.message}`);
     return null;
   }
 }
@@ -131,7 +142,10 @@ async function recordMention(company, date, speechTitle) {
   if (!ticker) return; // No ticker for this company (e.g. SpaceX, OpenAI)
 
   if (!mentionPriceStore[company]) {
-    const price = await fetchCurrentPrice(ticker);
+    const isHistorical = date && new Date(date) < new Date(Date.now() - 86400 * 1000);
+    const price = isHistorical
+      ? (await fetchPriceOnDate(ticker, date)) || (await fetchCurrentPrice(ticker))
+      : await fetchCurrentPrice(ticker);
     mentionPriceStore[company] = {
       ticker,
       company,
