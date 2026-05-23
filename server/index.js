@@ -770,6 +770,22 @@ app.get('/api/debug/truthsocial', async (req, res) => {
   }
 });
 
+// GET /api/debug/db — inspect database contents
+app.get('/api/debug/db', async (req, res) => {
+  try {
+    const { Pool } = require('pg');
+    if (!process.env.DATABASE_URL) return res.json({ error: 'DATABASE_URL not set' });
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+    const count = await pool.query('SELECT COUNT(*) FROM signal_posts');
+    const sample = await pool.query('SELECT id, date, has_signals, length(text) as text_len FROM signal_posts LIMIT 10');
+    const tables = await pool.query("SELECT table_name FROM information_schema.tables WHERE table_schema='public'");
+    await pool.end();
+    res.json({ tableCount: count.rows[0], sample: sample.rows, tables: tables.rows });
+  } catch (e) {
+    res.json({ error: e.message, stack: e.stack?.slice(0, 500) });
+  }
+});
+
 // GET /api/debug/finnhub — test Finnhub connectivity
 app.get('/api/debug/finnhub', async (req, res) => {
   const axios = require('axios');
