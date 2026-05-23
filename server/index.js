@@ -785,6 +785,24 @@ app.get('/api/debug/truthsocial', async (req, res) => {
   }
 });
 
+// POST /api/debug/reset-signals — clear signal posts from DB + memory so backfill can re-scan with fresh logic
+app.post('/api/debug/reset-signals', async (req, res) => {
+  try {
+    const { Pool } = require('pg');
+    if (!process.env.DATABASE_URL) return res.json({ error: 'DATABASE_URL not set' });
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+    await pool.query('DELETE FROM signal_posts');
+    await pool.end();
+    // Clear in-memory signal posts and seen IDs so backfill re-processes them
+    store.truthPosts = store.truthPosts.filter(p => !p.hasSignals);
+    store.seenTruthIds.clear();
+    store.signals = store.signals.filter(s => !s.id?.startsWith('sig_ts_'));
+    res.json({ cleared: true });
+  } catch (e) {
+    res.json({ error: e.message });
+  }
+});
+
 // POST /api/debug/set-prices — directly set mention prices (called from local script with real historical data)
 app.post('/api/debug/set-prices', async (req, res) => {
   const { prices } = req.body; // [{ company, ticker, firstMentionDate, firstMentionSpeech, firstMentionPrice }]
