@@ -70,7 +70,8 @@ function detectSignals(text) {
 
   KNOWN_COMPANIES.forEach((company) => {
     const lowerCompany = company.toLowerCase();
-    if (!lowerText.includes(lowerCompany)) return;
+    const wordBoundary = new RegExp(`\\b${lowerCompany.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`);
+    if (!wordBoundary.test(lowerText)) return;
 
     let score = 0;
     const hits = [];
@@ -111,7 +112,7 @@ async function analyzeWithClaude(title, date, text, detectedSignals) {
   const companyList = detectedSignals.map(s => `${s.company} (${s.sentiment}, score ${s.score})`).join(", ");
   try {
     const msg = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 500,
       system: `You are a financial analyst specializing in political speech analysis for trading signals.
 Analyze Trump speech transcripts and identify market-moving language.
