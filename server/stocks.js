@@ -6,6 +6,7 @@
  */
 
 const axios = require("axios");
+const { saveMentionPrice, loadMentionPrices } = require("./db");
 
 const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
 
@@ -130,7 +131,6 @@ async function recordMention(company, date, speechTitle) {
   if (!ticker) return; // No ticker for this company (e.g. SpaceX, OpenAI)
 
   if (!mentionPriceStore[company]) {
-    // Use current market price at time of mention (historical candles require paid plan)
     const price = await fetchCurrentPrice(ticker);
     mentionPriceStore[company] = {
       ticker,
@@ -140,6 +140,7 @@ async function recordMention(company, date, speechTitle) {
       firstMentionPrice: price,
     };
     console.log(`  💰 First mention: ${company} (${ticker}) on ${date} @ $${price}`);
+    await saveMentionPrice(mentionPriceStore[company]);
   }
 }
 
@@ -187,4 +188,14 @@ function getTicker(company) {
   return TICKER_MAP[company] || null;
 }
 
-module.exports = { recordMention, buildDailyDigest, fetchCurrentPrice, fetchPriceOnDate, getTicker, mentionPriceStore };
+async function restoreMentionPrices() {
+  const saved = await loadMentionPrices();
+  for (const record of saved) {
+    if (!mentionPriceStore[record.company]) {
+      mentionPriceStore[record.company] = record;
+    }
+  }
+  if (saved.length > 0) console.log(`[DB] Restored ${saved.length} mention prices.`);
+}
+
+module.exports = { recordMention, buildDailyDigest, fetchCurrentPrice, fetchPriceOnDate, getTicker, mentionPriceStore, restoreMentionPrices };

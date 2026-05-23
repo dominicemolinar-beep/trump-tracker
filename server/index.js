@@ -15,7 +15,8 @@ const cheerio = require("cheerio");
 const cron = require("node-cron");
 const cors = require("cors");
 const Anthropic = require("@anthropic-ai/sdk");
-const { recordMention, buildDailyDigest, getTicker, mentionPriceStore } = require("./stocks");
+const { recordMention, buildDailyDigest, getTicker, mentionPriceStore, restoreMentionPrices } = require("./stocks");
+const { initDb, saveSignalPost, loadSignalPosts } = require("./db");
 
 const app = express();
 app.use(cors());
@@ -580,64 +581,75 @@ app.get('/api/truthsocial', (req, res) => {
   res.json(store.truthPosts.slice(0, Number(limit)));
 });
 
-// GET /api/truthsocial/proxy — fetch live posts, run signal detection, return to client
+// GET /api/truthsocial/proxy — scrape Trump's social media posts from Factbase
 app.get('/api/truthsocial/proxy', async (req, res) => {
-  const PROXIES = [
-    (url) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
-    (url) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
-    (url) => url, // direct as last resort
+  const headers = { "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36", "Accept": "text/html,application/xhtml+xml" };
+
+  const SOURCES = [
+    "https://factba.se/topic/social-media",
+    "https://factba.se/topic/truth-social",
   ];
 
-  const headers = { "User-Agent": "Mozilla/5.0 (compatible; TrumpTracker/1.0)", "Accept": "application/json" };
+  let posts = [];
 
-  let accountId = null;
-  for (const proxy of PROXIES) {
+  for (const url of SOURCES) {
+    if (posts.length > 0) break;
     try {
-      const r = await axios.get(proxy("https://truthsocial.com/api/v1/accounts/lookup?acct=realDonaldTrump"), { headers, timeout: 10000 });
-      if (r.data?.id) { accountId = r.data.id; break; }
-    } catch {}
-  }
+      const r = await axios.get(url, { headers, timeout: 15000 });
+      const $ = cheerio.load(r.data);
 
-  if (!accountId) return res.json({ error: "Could not reach Truth Social. The platform may be blocking all server requests." });
+      $(".row, .transcript-item, .card, article, .statement, [class*='statement'], [class*='post'], [class*='truth']").each((i, el) => {
+        const text = $(el).find("p, .text, .body, .content").first().text().replace(/\s+/g, " ").trim()
+          || $(el).text().replace(/\s+/g, " ").trim();
+        const dateStr = $(el).find("time, .date, [datetime]").attr("datetime")
+          || $(el).find("time, .date").text().trim();
+        const link = $(el).find("a").attr("href") || "";
+        const fullLink = link.startsWith("http") ? link : `https://factba.se${link}`;
 
-  let rawPosts = [];
-  for (const proxy of PROXIES) {
-    try {
-      const r = await axios.get(proxy(`https://truthsocial.com/api/v1/accounts/${accountId}/statuses?limit=40&exclude_replies=true`), { headers, timeout: 10000 });
-      if (Array.isArray(r.data) && r.data.length > 0) { rawPosts = r.data; break; }
-    } catch {}
-  }
-
-  if (rawPosts.length === 0) return res.json({ error: "Fetched account but could not load posts." });
-
-  const posts = rawPosts.map(p => {
-    const text = (p.content || "").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    const signals = detectSignals(text);
-    const date = p.created_at ? p.created_at.split("T")[0] : new Date().toISOString().split("T")[0];
-    return {
-      id: `truth_${p.id}`,
-      text,
-      date,
-      createdAt: p.created_at,
-      url: p.url || `https://truthsocial.com/@realDonaldTrump/${p.id}`,
-      reblogsCount: p.reblogs_count || 0,
-      favouritesCount: p.favourites_count || 0,
-      repliesCount: p.replies_count || 0,
-      signals,
-      hasSignals: signals.length > 0,
-      topSignal: signals[0] || null,
-    };
-  });
-
-  // Cache results and record any new mentions
-  for (const post of posts) {
-    if (!store.seenTruthIds.has(post.id)) {
-      store.seenTruthIds.add(post.id);
-      store.truthPosts.unshift(post);
-      for (const sig of post.signals) {
-        await recordMention(sig.company, post.date, post.text.slice(0, 80));
-      }
+        if (text && text.length > 20 && text.length < 5000) {
+          const id = `fact_${Buffer.from(text.slice(0, 40)).toString("base64").slice(0, 16)}`;
+          if (!store.seenTruthIds.has(id)) {
+            const date = dateStr ? dateStr.split("T")[0] : new Date().toISOString().split("T")[0];
+            const signals = detectSignals(text);
+            posts.push({ id, text, date, createdAt: dateStr || null, url: fullLink, reblogsCount: 0, favouritesCount: 0, repliesCount: 0, signals, hasSignals: signals.length > 0, topSignal: signals[0] || null });
+          }
+        }
+      });
+    } catch (e) {
+      console.error(`[Factbase scrape] ${url}: ${e.message}`);
     }
+  }
+
+  // Fallback: try the RSS feed
+  if (posts.length === 0) {
+    try {
+      const r = await axios.get("https://truthsocial.com/@realDonaldTrump.rss", { headers: { ...headers, "Accept": "application/rss+xml, text/xml" }, timeout: 10000 });
+      const $ = cheerio.load(r.data, { xmlMode: true });
+      $("item").each((i, el) => {
+        const text = $(el).find("description").text().replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+        const dateStr = $(el).find("pubDate").text().trim();
+        const link = $(el).find("link").text().trim();
+        const id = `rss_${$(el).find("guid").text().trim().slice(-16)}`;
+        if (text && text.length > 10 && !store.seenTruthIds.has(id)) {
+          const date = dateStr ? new Date(dateStr).toISOString().split("T")[0] : new Date().toISOString().split("T")[0];
+          const signals = detectSignals(text);
+          posts.push({ id, text, date, createdAt: dateStr || null, url: link, reblogsCount: 0, favouritesCount: 0, repliesCount: 0, signals, hasSignals: signals.length > 0, topSignal: signals[0] || null });
+        }
+      });
+    } catch (e) {
+      console.error(`[RSS fallback] ${e.message}`);
+    }
+  }
+
+  if (posts.length === 0) return res.json({ error: "Could not load posts from any source. All data providers appear to be blocking server requests." });
+
+  for (const post of posts) {
+    store.seenTruthIds.add(post.id);
+    store.truthPosts.unshift(post);
+    for (const sig of post.signals) {
+      await recordMention(sig.company, post.date, post.text.slice(0, 80));
+    }
+    if (post.hasSignals) await saveSignalPost(post);
   }
   store.truthPosts = store.truthPosts.slice(0, 200);
 
@@ -689,20 +701,34 @@ app.get('/api/digest', async (req, res) => {
 });
 
 // ─── Start ────────────────────────────────────────────────────────────────────
-seedDemoData();
+async function start() {
+  await initDb();
+  await restoreMentionPrices();
 
-// Schedule polling every N minutes
-cron.schedule(`*/${POLL_INTERVAL_MINUTES} * * * *`, pollForNewTranscripts);
+  // Restore saved Truth Social signal posts
+  const savedPosts = await loadSignalPosts();
+  for (const post of savedPosts) {
+    if (!store.seenTruthIds.has(post.id)) {
+      store.seenTruthIds.add(post.id);
+      store.truthPosts.push(post);
+    }
+  }
+  if (savedPosts.length > 0) console.log(`[DB] Restored ${savedPosts.length} Truth Social signal posts.`);
 
-// Run immediately on startup
-pollForNewTranscripts();
+  await seedDemoData();
 
-app.listen(PORT, () => {
-  console.log(`
+  cron.schedule(`*/${POLL_INTERVAL_MINUTES} * * * *`, pollForNewTranscripts);
+  pollForNewTranscripts();
+
+  app.listen(PORT, () => {
+    console.log(`
 ╔══════════════════════════════════════════════╗
 ║   TRUMP SPEECH SIGNAL TRACKER — Server       ║
 ║   http://localhost:${PORT}                      ║
 ║   Polling every ${POLL_INTERVAL_MINUTES} minutes                   ║
 ╚══════════════════════════════════════════════╝
-  `);
-});
+    `);
+  });
+}
+
+start();
