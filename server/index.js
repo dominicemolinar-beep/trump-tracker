@@ -120,6 +120,53 @@ function detectSignals(text) {
   return results.sort((a, b) => b.score - a.score);
 }
 
+// ─── Claude signal verification for Truth Social posts ───────────────────────
+// Takes keyword-detected signals and verifies each one, corrects sentiment, adds reason.
+// Returns only genuine signals. Makes ONE Claude call regardless of company count.
+async function verifySignalsWithClaude(postText, signals) {
+  if (!ANTHROPIC_API_KEY || !signals.length) return signals;
+  try {
+    const companiesList = signals.map(s => `${s.company} (keyword: ${s.sentiment})`).join(", ");
+    const msg = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 500,
+      messages: [{
+        role: "user",
+        content: `You are a financial analyst reviewing Trump Truth Social posts for genuine stock market signals.
+
+Post: "${postText.slice(0, 800)}"
+
+Keyword scanner flagged these companies: ${companiesList}
+
+For each company:
+1. Is the post genuinely expressing sentiment about that company as a business/stock? (Could be a false positive if the company name appears coincidentally or the negative word is about a politician.)
+2. What is the correct market sentiment: STRONG_BUY, BUY, POSITIVE, NEUTRAL, NEGATIVE, AVOID, or NONE (if not a real signal)?
+3. One short sentence explaining why.
+
+Reply with a JSON array only, no other text:
+[{"company":"Name","genuine":true,"sentiment":"SENTIMENT","reason":"..."}]`
+      }]
+    });
+
+    let parsed;
+    try {
+      const raw = msg.content[0].text.trim().replace(/^```json\n?/, "").replace(/\n?```$/, "");
+      parsed = JSON.parse(raw);
+    } catch {
+      return signals;
+    }
+
+    return signals.map(sig => {
+      const analysis = parsed.find(a => a.company === sig.company);
+      if (!analysis || !analysis.genuine || analysis.sentiment === "NONE") return null;
+      return { ...sig, sentiment: analysis.sentiment, aiReason: analysis.reason };
+    }).filter(Boolean);
+  } catch (e) {
+    console.error(`[Claude verify] ${e.message}`);
+    return signals.map(s => ({ ...s, aiReason: null }));
+  }
+}
+
 // ─── Claude AI analysis ──────────────────────────────────────────────────────
 async function analyzeWithClaude(title, date, text, detectedSignals) {
   if (!ANTHROPIC_API_KEY) return "Add ANTHROPIC_API_KEY to .env to enable AI summaries.";
@@ -619,7 +666,8 @@ app.get('/api/truthsocial/proxy', async (req, res) => {
       const url = p.platformId
         ? `https://truthsocial.com/@realDonaldTrump/${p.platformId}`
         : `https://trump.fm/post/${id}`;
-      const signals = detectSignals(text);
+      const rawSignals = detectSignals(text);
+      const signals = rawSignals.length > 0 ? await verifySignalsWithClaude(text, rawSignals) : [];
 
       posts.push({
         id,
@@ -704,7 +752,9 @@ app.post('/api/backfill', async (req, res) => {
 
         const date = p.createdAt.split("T")[0];
         const postUrl = p.platformId ? `https://truthsocial.com/@realDonaldTrump/${p.platformId}` : `https://trump.fm/post/${id}`;
-        const signals = detectSignals(text);
+        const rawSignals = detectSignals(text);
+        if (!rawSignals.length) continue;
+        const signals = await verifySignalsWithClaude(text, rawSignals);
 
         const post = {
           id, text, date, createdAt: p.createdAt,

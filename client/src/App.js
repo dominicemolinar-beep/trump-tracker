@@ -223,7 +223,12 @@ function TruthPostCard({ post }) {
                     {sig.score > 0 ? "+" : ""}{sig.score}
                   </span>
                 </div>
-                {sig.hits.map((hit, j) => (
+                {sig.aiReason && (
+                  <div style={{ fontSize: 12, color: scfg.color, opacity: 0.85, marginTop: 5, lineHeight: 1.4 }}>
+                    ✦ {sig.aiReason}
+                  </div>
+                )}
+                {!sig.aiReason && sig.hits?.map((hit, j) => (
                   <div key={j} style={{ fontSize: 12, color: C.textMute, fontStyle: "italic", marginTop: 4 }}>"{hit.quote}"</div>
                 ))}
               </div>
