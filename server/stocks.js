@@ -104,15 +104,19 @@ async function fetchCurrentPrice(ticker) {
 async function fetchPriceOnDate(ticker, dateStr) {
   try {
     const date = new Date(dateStr);
-    const from = Math.floor((date.getTime() - 86400 * 1000) / 1000);
-    const to = Math.floor((date.getTime() + 86400 * 4 * 1000) / 1000);
+    // Search 3 days before to 7 days after to catch weekends/holidays
+    const from = Math.floor((date.getTime() - 86400 * 3 * 1000) / 1000);
+    const to = Math.floor((date.getTime() + 86400 * 7 * 1000) / 1000);
 
     const url = `https://finnhub.io/api/v1/stock/candle?symbol=${ticker}&resolution=D&from=${from}&to=${to}&token=${FINNHUB_KEY}`;
     const { data } = await axios.get(url, { timeout: 8000 });
 
+    console.log(`  [Finnhub candle] ${ticker} ${dateStr}: status=${data?.s} closes=${JSON.stringify(data?.c?.slice(0,2))}`);
+
     if (!data || data.s !== "ok" || !data.c || data.c.length === 0) return null;
     return Number(data.c[0].toFixed(2));
   } catch (e) {
+    console.error(`  [Finnhub candle error] ${ticker} ${dateStr}: ${e.message}`);
     return null;
   }
 }
@@ -146,6 +150,12 @@ async function buildDailyDigest() {
   const entries = [];
 
   for (const [company, record] of Object.entries(mentionPriceStore)) {
+    // Retry first-mention price if it never loaded
+    if (!record.firstMentionPrice) {
+      const retried = await fetchPriceOnDate(record.ticker, record.firstMentionDate);
+      if (retried) record.firstMentionPrice = retried;
+    }
+
     const currentPrice = await fetchCurrentPrice(record.ticker);
 
     let pctChange = null;
