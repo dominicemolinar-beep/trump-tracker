@@ -643,6 +643,19 @@ app.get('/api/truthsocial/proxy', async (req, res) => {
   res.json(posts);
 });
 
+// GET /api/debug/trumpfm — test trump.fm connectivity
+app.get('/api/debug/trumpfm', async (req, res) => {
+  try {
+    const r = await axios.get("https://trump.fm/api/posts?platform=truth&limit=3", {
+      headers: { "User-Agent": "TrumpSignalTracker/1.0" },
+      timeout: 10000,
+    });
+    res.json({ status: r.status, dataType: typeof r.data, isArray: Array.isArray(r.data), keys: r.data && typeof r.data === 'object' ? Object.keys(r.data) : null, sample: JSON.stringify(r.data).slice(0, 500) });
+  } catch(e) {
+    res.json({ error: e.message, status: e.response?.status, data: e.response?.data });
+  }
+});
+
 // GET /api/debug/truthsocial — test Truth Social connectivity
 app.get('/api/debug/truthsocial', async (req, res) => {
   try {
