@@ -808,6 +808,17 @@ app.delete('/api/debug/mention-prices', async (req, res) => {
   }
 });
 
+// GET /api/debug/yahoo — test Yahoo Finance historical price fetch
+app.get('/api/debug/yahoo', async (req, res) => {
+  try {
+    const { fetchPriceOnDate } = require('./stocks');
+    const price = await fetchPriceOnDate('AMZN', '2025-12-06');
+    res.json({ ticker: 'AMZN', date: '2025-12-06', price });
+  } catch (e) {
+    res.json({ error: e.message, stack: e.stack?.slice(0, 800) });
+  }
+});
+
 // GET /api/debug/db — inspect database contents
 app.get('/api/debug/db', async (req, res) => {
   try {
