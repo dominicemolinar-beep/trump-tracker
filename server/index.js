@@ -824,12 +824,16 @@ app.delete('/api/debug/mention-prices', async (req, res) => {
 
 // GET /api/debug/yahoo — test Alpha Vantage historical price fetch
 app.get('/api/debug/yahoo', async (req, res) => {
+  const key = process.env.ALPHA_VANTAGE_KEY;
   try {
-    const { fetchPriceOnDate } = require('./stocks');
-    const price = await fetchPriceOnDate('AMZN', '2025-12-06');
-    res.json({ ticker: 'AMZN', date: '2025-12-06', price, keySet: !!process.env.ALPHA_VANTAGE_KEY });
+    const r = await axios.get(`https://www.alphavantage.co/query?function=TIME_SERIES_WEEKLY&symbol=AMZN&apikey=${key}`, { timeout: 15000 });
+    const series = r.data["Weekly Time Series"];
+    const keys = series ? Object.keys(series).slice(0,3) : null;
+    const dec = series ? Object.keys(series).filter(k => k.startsWith('2025-12')).slice(0,3) : null;
+    const rawInfo = r.data["Information"] || r.data["Note"] || null;
+    res.json({ keySet: !!key, seriesFound: !!series, recentDates: keys, dec2025: dec, rawInfo, sampleClose: dec?.[0] ? series[dec[0]]["4. close"] : null });
   } catch (e) {
-    res.json({ error: e.message, type: e.constructor?.name });
+    res.json({ error: e.message, keySet: !!key });
   }
 });
 
