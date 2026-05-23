@@ -770,6 +770,20 @@ app.get('/api/debug/truthsocial', async (req, res) => {
   }
 });
 
+// POST /api/debug/set-prices — directly set mention prices (called from local script with real historical data)
+app.post('/api/debug/set-prices', async (req, res) => {
+  const { prices } = req.body; // [{ company, ticker, firstMentionDate, firstMentionSpeech, firstMentionPrice }]
+  if (!Array.isArray(prices)) return res.status(400).json({ error: 'prices must be array' });
+  const { saveMentionPrice } = require('./db');
+  let updated = 0;
+  for (const p of prices) {
+    mentionPriceStore[p.company] = p;
+    await saveMentionPrice(p);
+    updated++;
+  }
+  res.json({ updated });
+});
+
 // POST /api/debug/reprice — re-fetch historical prices for all saved signal posts
 app.post('/api/debug/reprice', async (req, res) => {
   const { Pool } = require('pg');
