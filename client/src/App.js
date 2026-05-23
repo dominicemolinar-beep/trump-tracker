@@ -501,8 +501,8 @@ export default function App() {
           {/* ── Tabs ── */}
           <div style={{ display: "flex", gap: 4, marginBottom: 24, background: C.surface, borderRadius: 10, padding: 4, border: `1px solid ${C.border}`, width: "fit-content" }}>
             {[
-              { id: "live",      label: "📡 Live Feed" },
               { id: "truth",     label: "📣 Truth Social" },
+              { id: "live",      label: "📡 Live Feed" },
               { id: "digest",    label: "📈 Daily Digest" },
               { id: "signals",   label: "📊 Signal Board" },
               { id: "companies", label: "🏢 Companies" },
