@@ -6,6 +6,7 @@
  */
 
 const axios = require("axios");
+const yahooFinance = require("yahoo-finance2").default;
 
 // ─── Company → Ticker map ─────────────────────────────────────────────────────
 const TICKER_MAP = {
@@ -78,34 +79,15 @@ const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
  * Returns null if unavailable.
  */
 async function fetchCurrentPrice(ticker) {
-  // Check cache
   const cached = priceCache[ticker];
   if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
     return cached.price;
   }
 
   try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`;
-    const res = await axios.get(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0",
-        "Accept": "application/json",
-      },
-      timeout: 8000,
-    });
-
-    const result = res.data?.chart?.result?.[0];
-    if (!result) return null;
-
-    // Use regular market price or last close
-    const meta = result.meta;
-    const price =
-      meta.regularMarketPrice ||
-      meta.previousClose ||
-      result.indicators?.quote?.[0]?.close?.slice(-1)[0];
-
+    const quote = await yahooFinance.quote(ticker);
+    const price = quote?.regularMarketPrice || quote?.previousClose;
     if (!price) return null;
-
     priceCache[ticker] = { price: Number(price.toFixed(2)), fetchedAt: Date.now() };
     return priceCache[ticker].price;
   } catch (e) {
@@ -120,23 +102,17 @@ async function fetchCurrentPrice(ticker) {
 async function fetchPriceOnDate(ticker, dateStr) {
   try {
     const date = new Date(dateStr);
-    const from = Math.floor(date.getTime() / 1000) - 86400; // day before
-    const to = Math.floor(date.getTime() / 1000) + 86400 * 3; // 3 days after (weekend buffer)
+    const from = new Date(date.getTime() - 86400 * 1000);
+    const to = new Date(date.getTime() + 86400 * 4000);
 
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&period1=${from}&period2=${to}`;
-    const res = await axios.get(url, {
-      headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" },
-      timeout: 8000,
+    const result = await yahooFinance.historical(ticker, {
+      period1: from,
+      period2: to,
+      interval: "1d",
     });
 
-    const result = res.data?.chart?.result?.[0];
-    if (!result) return null;
-
-    const closes = result.indicators?.quote?.[0]?.close;
-    if (!closes || closes.length === 0) return null;
-
-    // Find first non-null close
-    const price = closes.find(p => p !== null && p !== undefined);
+    if (!result || result.length === 0) return null;
+    const price = result[0]?.close;
     return price ? Number(price.toFixed(2)) : null;
   } catch (e) {
     return null;
