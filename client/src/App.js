@@ -245,10 +245,12 @@ function DigestRow({ entry, rank }) {
 
   const rowBg = rank % 2 === 0 ? C.surface : C.raised;
 
+  const sig = entry.topSignal ? SENTIMENT_CFG[entry.topSignal.sentiment] : null;
+
   return (
     <div style={{
       display: "grid",
-      gridTemplateColumns: "36px 140px 80px 120px 120px 130px 1fr",
+      gridTemplateColumns: "36px 140px 80px 120px 120px 130px 110px 1fr",
       alignItems: "center",
       gap: 0,
       padding: "13px 20px",
@@ -285,6 +287,14 @@ function DigestRow({ entry, rank }) {
         }}>
           {noData ? "–" : `${arrow} ${Math.abs(entry.pctChange).toFixed(2)}%`}
         </span>
+      </div>
+      <div>
+        {sig
+          ? <span style={{ background: sig.bg, color: sig.color, border: `1px solid ${sig.color}33`, borderRadius: 6, padding: "3px 8px", fontFamily: "monospace", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
+              {sig.icon} {sig.label}
+            </span>
+          : <span style={{ color: C.textFaint, fontSize: 11, fontFamily: "monospace" }}>–</span>
+        }
       </div>
       <div style={{ fontSize: 11, color: C.textMute, fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingLeft: 12 }}>
         {entry.firstMentionSpeech}
@@ -648,11 +658,11 @@ export default function App() {
               {digestData?.entries && digestData.entries.length > 0 && (
                 <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
                   <div style={{
-                    display: "grid", gridTemplateColumns: "36px 140px 80px 120px 120px 130px 1fr",
+                    display: "grid", gridTemplateColumns: "36px 140px 80px 120px 120px 130px 110px 1fr",
                     gap: 0, padding: "10px 20px", background: C.bg, borderBottom: `1px solid ${C.border}`,
                   }}>
-                    {["#", "COMPANY", "FIRST SEEN", "PRICE THEN", "PRICE NOW", "CHANGE", "SPEECH"].map((h, i) => (
-                      <div key={i} style={{ fontSize: 10, color: C.textMute, fontFamily: "monospace", letterSpacing: 1.5, paddingLeft: i === 6 ? 12 : 0 }}>{h}</div>
+                    {["#", "COMPANY", "FIRST SEEN", "PRICE THEN", "PRICE NOW", "CHANGE", "SIGNAL", "SPEECH"].map((h, i) => (
+                      <div key={i} style={{ fontSize: 10, color: C.textMute, fontFamily: "monospace", letterSpacing: 1.5, paddingLeft: i === 7 ? 12 : 0 }}>{h}</div>
                     ))}
                   </div>
                   {digestData.entries.map((entry, i) => (

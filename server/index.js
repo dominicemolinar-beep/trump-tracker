@@ -872,7 +872,15 @@ app.get('/api/debug/finnhub', async (req, res) => {
 app.get('/api/digest', async (req, res) => {
   try {
     const digest = await buildDailyDigest();
-    res.json({ generatedAt: new Date().toISOString(), entries: digest });
+
+    // Enrich each entry with the top signal sentiment for that company
+    const enriched = digest.map(entry => {
+      const sigs = store.signals.filter(s => s.company === entry.company);
+      const top = sigs.reduce((best, s) => (!best || Math.abs(s.score) > Math.abs(best.score) ? s : best), null);
+      return { ...entry, topSignal: top ? { sentiment: top.sentiment, score: top.score } : null };
+    });
+
+    res.json({ generatedAt: new Date().toISOString(), entries: enriched });
   } catch(e) {
     res.status(500).json({ error: e.message });
   }
