@@ -289,10 +289,11 @@ function Tab({ id, label, active, onClick, disabled }) {
 export default function App() {
   const [activeTab, setActiveTab] = useState("live");
   const [manualText, setManualText] = useState("");
-  const [manualTitle, setManualTitle] = useState("");
+  const [manualUrl, setManualUrl] = useState("");
   const [manualDate, setManualDate] = useState("");
   const [scanning, setScanning] = useState(false);
   const [scanResult, setScanResult] = useState(null);
+  const [scanErrors, setScanErrors] = useState({});
   const [triggering, setTriggering] = useState(false);
   const [digestLoading, setDigestLoading] = useState(false);
   const [digestData, setDigestData] = useState(null);
@@ -359,14 +360,23 @@ export default function App() {
   }
 
   async function submitManualScan() {
-    if (!manualText.trim() || scanning) return;
+    if (scanning) return;
+    const errors = {};
+    if (!manualText.trim()) errors.text = "Transcript text is required.";
+    else if (manualText.trim().length < 50) errors.text = "Text is too short — paste at least 50 characters.";
+    if (manualUrl.trim() && !/^https?:\/\/.+\..+/.test(manualUrl.trim())) errors.url = "Must be a valid URL starting with http:// or https://";
+    if (manualDate && isNaN(Date.parse(manualDate))) errors.date = "Enter a valid date.";
+    setScanErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
     setScanning(true);
     setScanResult(null);
+    const title = manualUrl.trim() ? new URL(manualUrl.trim()).hostname.replace(/^www\./, "") : "Manual Submission";
     try {
       const res = await fetch(`${API}/api/scan`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: manualTitle, date: manualDate, text: manualText }),
+        body: JSON.stringify({ title, url: manualUrl.trim() || null, date: manualDate, text: manualText }),
       });
       const data = await res.json();
       setScanResult(data);
@@ -633,40 +643,79 @@ export default function App() {
           {activeTab === "manual" && (
             <div className="fadein" style={{ maxWidth: 800 }}>
               <div style={{ fontSize: 13, color: C.textSub, lineHeight: 1.7, marginBottom: 20 }}>
-                Paste any Trump transcript directly. The server scans it, adds it to the tracker, and records the stock price at time of mention for the Daily Digest.
+                Paste any Trump transcript or Truth Social post. The server scans it for market signals, adds it to the tracker, and records stock prices at time of mention.
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-                <Field label="TITLE" value={manualTitle} onChange={setManualTitle} placeholder="e.g. Rally in Phoenix" />
-                <Field label="DATE" value={manualDate} onChange={setManualDate} type="date" />
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 4 }}>
+                <div>
+                  <Field
+                    label="SOURCE URL"
+                    value={manualUrl}
+                    onChange={v => { setManualUrl(v); setScanErrors(e => ({ ...e, url: null })); }}
+                    placeholder="https://truthsocial.com/@realDonaldTrump/..."
+                    error={scanErrors.url}
+                  />
+                </div>
+                <div>
+                  <Field
+                    label="DATE"
+                    value={manualDate}
+                    onChange={v => { setManualDate(v); setScanErrors(e => ({ ...e, date: null })); }}
+                    type="date"
+                    error={scanErrors.date}
+                  />
+                </div>
               </div>
-              <textarea
-                value={manualText}
-                onChange={e => setManualText(e.target.value)}
-                placeholder="Paste transcript text here..."
-                style={{ width: "100%", minHeight: 220, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: 16, color: C.text, fontSize: 14, outline: "none", resize: "vertical", lineHeight: 1.7, marginBottom: 12 }}
-              />
-              <button onClick={submitManualScan} disabled={scanning || !manualText.trim()} style={{
+
+              <div style={{ marginBottom: 4 }}>
+                <label style={{ fontSize: 11, color: C.textSub, letterSpacing: 1, fontFamily: "monospace", display: "block", marginBottom: 6 }}>
+                  TRANSCRIPT / POST TEXT <span style={{ color: "#ef4444" }}>*</span>
+                </label>
+                <textarea
+                  value={manualText}
+                  onChange={e => { setManualText(e.target.value); setScanErrors(err => ({ ...err, text: null })); }}
+                  placeholder="Paste transcript or post text here... (minimum 50 characters)"
+                  style={{
+                    width: "100%", minHeight: 220, background: C.surface,
+                    border: `1px solid ${scanErrors.text ? "#ef4444" : C.border}`,
+                    borderRadius: 10, padding: 16, color: C.text, fontSize: 14,
+                    outline: "none", resize: "vertical", lineHeight: 1.7,
+                  }}
+                />
+                <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4, marginBottom: 8 }}>
+                  {scanErrors.text
+                    ? <span style={{ fontSize: 11, color: "#ef4444", fontFamily: "monospace" }}>⚠ {scanErrors.text}</span>
+                    : <span style={{ fontSize: 11, color: C.textFaint, fontFamily: "monospace" }}>{manualText.length} chars</span>
+                  }
+                  <span style={{ fontSize: 11, color: manualText.length >= 50 ? "#00e87a" : C.textFaint, fontFamily: "monospace" }}>
+                    {manualText.length >= 50 ? "✓ Ready to scan" : `${50 - manualText.length} more needed`}
+                  </span>
+                </div>
+              </div>
+
+              <button onClick={submitManualScan} disabled={scanning} style={{
                 width: "100%", padding: 15, borderRadius: 10, border: "none",
-                background: scanning || !manualText.trim() ? C.raised : `linear-gradient(135deg,${C.gold},#8a6e10,${C.gold})`,
-                color: scanning || !manualText.trim() ? C.textMute : "#06111f",
+                background: scanning ? C.raised : `linear-gradient(135deg,${C.gold},#8a6e10,${C.gold})`,
+                color: scanning ? C.textMute : "#06111f",
                 fontSize: 14, fontFamily: "'Bebas Neue',sans-serif", letterSpacing: 3,
-                cursor: scanning || !manualText.trim() ? "not-allowed" : "pointer",
-                boxShadow: scanning || !manualText.trim() ? "none" : `0 0 20px ${C.gold}44`,
+                cursor: scanning ? "not-allowed" : "pointer",
+                boxShadow: scanning ? "none" : `0 0 20px ${C.gold}44`,
+                transition: "all 0.15s",
               }}>
                 {scanning ? "⚡ SCANNING..." : "🔍 SCAN FOR SIGNALS"}
               </button>
+
               {scanResult && !scanResult.error && (
                 <div style={{ marginTop: 20 }}>
                   <AppearanceCard appearance={scanResult} />
-                  {scanResult.hasSignals && (
-                    <div style={{ marginTop: 10, fontSize: 12, color: C.gold, fontFamily: "monospace" }}>
-                      ✦ Stock prices recorded — check the Daily Digest tab
-                    </div>
-                  )}
+                  {scanResult.hasSignals
+                    ? <div style={{ marginTop: 10, fontSize: 12, color: C.gold, fontFamily: "monospace" }}>✦ Stock prices recorded — check the Daily Digest tab</div>
+                    : <div style={{ marginTop: 10, fontSize: 12, color: C.textMute, fontFamily: "monospace" }}>No market signals detected in this text.</div>
+                  }
                 </div>
               )}
               {scanResult?.error && (
-                <div style={{ marginTop: 12, color: "#ef4444", fontSize: 13, fontFamily: "monospace" }}>Error: {scanResult.error}</div>
+                <div style={{ marginTop: 12, color: "#ef4444", fontSize: 13, fontFamily: "monospace" }}>⚠ Error: {scanResult.error}</div>
               )}
             </div>
           )}
@@ -715,14 +764,15 @@ function SignalRow({ signal }) {
   );
 }
 
-function Field({ label, value, onChange, placeholder, type = "text" }) {
+function Field({ label, value, onChange, placeholder, type = "text", error }) {
   return (
     <div>
-      <label style={{ fontSize: 11, color: C.textSub, letterSpacing: 1, fontFamily: "monospace", display: "block", marginBottom: 6 }}>{label}</label>
+      <label style={{ fontSize: 11, color: error ? "#ef4444" : C.textSub, letterSpacing: 1, fontFamily: "monospace", display: "block", marginBottom: 6 }}>{label}</label>
       <input
         type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
-        style={{ width: "100%", background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "10px 14px", color: C.text, fontSize: 14, outline: "none" }}
+        style={{ width: "100%", background: C.surface, border: `1px solid ${error ? "#ef4444" : C.border}`, borderRadius: 8, padding: "10px 14px", color: C.text, fontSize: 14, outline: "none" }}
       />
+      {error && <div style={{ fontSize: 11, color: "#ef4444", fontFamily: "monospace", marginTop: 4 }}>⚠ {error}</div>}
     </div>
   );
 }
