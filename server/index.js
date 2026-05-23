@@ -811,11 +811,15 @@ app.delete('/api/debug/mention-prices', async (req, res) => {
 // GET /api/debug/yahoo — test Yahoo Finance historical price fetch
 app.get('/api/debug/yahoo', async (req, res) => {
   try {
-    const { fetchPriceOnDate } = require('./stocks');
-    const price = await fetchPriceOnDate('AMZN', '2025-12-06');
-    res.json({ ticker: 'AMZN', date: '2025-12-06', price });
+    const yahooFinance = require('yahoo-finance2').default;
+    const result = await yahooFinance.historical('AMZN', {
+      period1: '2025-12-03',
+      period2: '2025-12-10',
+      interval: '1d',
+    });
+    res.json({ rowCount: result?.length, first: result?.[0], keys: result?.[0] ? Object.keys(result[0]) : null });
   } catch (e) {
-    res.json({ error: e.message, stack: e.stack?.slice(0, 800) });
+    res.json({ error: e.message, type: e.constructor?.name, stack: e.stack?.slice(0, 1000) });
   }
 });
 
