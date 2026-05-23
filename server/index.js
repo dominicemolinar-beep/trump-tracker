@@ -770,6 +770,22 @@ app.get('/api/debug/truthsocial', async (req, res) => {
   }
 });
 
+// DELETE /api/debug/mention-prices — clear stale mention prices so backfill can re-fetch correct historical ones
+app.delete('/api/debug/mention-prices', async (req, res) => {
+  try {
+    const { Pool } = require('pg');
+    if (!process.env.DATABASE_URL) return res.json({ error: 'DATABASE_URL not set' });
+    const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
+    await pool.query('DELETE FROM mention_prices');
+    await pool.end();
+    // Also clear in-memory store
+    Object.keys(mentionPriceStore).forEach(k => delete mentionPriceStore[k]);
+    res.json({ cleared: true });
+  } catch (e) {
+    res.json({ error: e.message });
+  }
+});
+
 // GET /api/debug/db — inspect database contents
 app.get('/api/debug/db', async (req, res) => {
   try {
