@@ -6,7 +6,8 @@
  */
 
 const axios = require("axios");
-const yahooFinance = require("yahoo-finance2").default;
+
+const FINNHUB_KEY = process.env.FINNHUB_API_KEY;
 
 // ─── Company → Ticker map ─────────────────────────────────────────────────────
 const TICKER_MAP = {
@@ -85,8 +86,9 @@ async function fetchCurrentPrice(ticker) {
   }
 
   try {
-    const quote = await yahooFinance.quote(ticker);
-    const price = quote?.regularMarketPrice || quote?.previousClose;
+    const url = `https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${FINNHUB_KEY}`;
+    const { data } = await axios.get(url, { timeout: 8000 });
+    const price = data?.c || data?.pc;
     if (!price) return null;
     priceCache[ticker] = { price: Number(price.toFixed(2)), fetchedAt: Date.now() };
     return priceCache[ticker].price;
@@ -102,18 +104,14 @@ async function fetchCurrentPrice(ticker) {
 async function fetchPriceOnDate(ticker, dateStr) {
   try {
     const date = new Date(dateStr);
-    const from = new Date(date.getTime() - 86400 * 1000);
-    const to = new Date(date.getTime() + 86400 * 4000);
+    const from = Math.floor((date.getTime() - 86400 * 1000) / 1000);
+    const to = Math.floor((date.getTime() + 86400 * 4 * 1000) / 1000);
 
-    const result = await yahooFinance.historical(ticker, {
-      period1: from,
-      period2: to,
-      interval: "1d",
-    });
+    const url = `https://finnhub.io/api/v1/stock/candle?symbol=${ticker}&resolution=D&from=${from}&to=${to}&token=${FINNHUB_KEY}`;
+    const { data } = await axios.get(url, { timeout: 8000 });
 
-    if (!result || result.length === 0) return null;
-    const price = result[0]?.close;
-    return price ? Number(price.toFixed(2)) : null;
+    if (!data || data.s !== "ok" || !data.c || data.c.length === 0) return null;
+    return Number(data.c[0].toFixed(2));
   } catch (e) {
     return null;
   }
