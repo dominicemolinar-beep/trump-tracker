@@ -537,6 +537,25 @@ app.get('/api/truthsocial', (req, res) => {
   res.json(store.truthPosts.slice(0, Number(limit)));
 });
 
+// GET /api/debug/truthsocial — test Truth Social connectivity
+app.get('/api/debug/truthsocial', async (req, res) => {
+  try {
+    const lookup = await axios.get('https://truthsocial.com/api/v1/accounts/lookup?acct=realDonaldTrump', {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TrumpTracker/1.0)' },
+      timeout: 10000,
+    });
+    const id = lookup.data?.id;
+    if (!id) return res.json({ error: 'No account ID returned', data: lookup.data });
+    const posts = await axios.get(`https://truthsocial.com/api/v1/accounts/${id}/statuses?limit=3`, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; TrumpTracker/1.0)' },
+      timeout: 10000,
+    });
+    res.json({ accountId: id, postCount: posts.data?.length, firstPost: posts.data?.[0]?.content?.slice(0, 200) });
+  } catch(e) {
+    res.json({ error: e.message, status: e.response?.status, data: e.response?.data });
+  }
+});
+
 // GET /api/debug/finnhub — test Finnhub connectivity
 app.get('/api/debug/finnhub', async (req, res) => {
   const axios = require('axios');
