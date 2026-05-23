@@ -591,7 +591,7 @@ app.get('/api/truthsocial/proxy', async (req, res) => {
       timeout: 10000,
     });
 
-    const raw = r.data?.posts || r.data || [];
+    const raw = r.data?.data || r.data?.posts || (Array.isArray(r.data) ? r.data : []);
     for (const p of raw) {
       const text = (p.content || "").trim();
       if (!text || text.length < 5) continue;
