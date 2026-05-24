@@ -854,11 +854,16 @@ app.post('/api/debug/set-prices', async (req, res) => {
   if (!Array.isArray(prices)) return res.status(400).json({ error: 'prices must be array' });
   const { saveMentionPrice } = require('./db');
   let updated = 0;
+  const { saveMentionPrice: save2, loadMentionPrices: load2 } = require('./db');
   for (const p of prices) {
-    mentionPriceStore[p.company] = p;
-    await saveMentionPrice(p);
+    // Merge — don't wipe fields like firstMentionUrl that backfill already saved
+    mentionPriceStore[p.company] = { ...(mentionPriceStore[p.company] || {}), ...p };
+    await save2(mentionPriceStore[p.company]);
     updated++;
   }
+  // Reload from DB so in-memory store has all fields including URLs
+  const refreshed = await load2();
+  for (const r of refreshed) mentionPriceStore[r.company] = { ...(mentionPriceStore[r.company] || {}), ...r };
   res.json({ updated });
 });
 
