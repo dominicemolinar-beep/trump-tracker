@@ -543,9 +543,9 @@ export default function App() {
           {/* ── Tabs ── */}
           <div style={{ display: "flex", gap: 4, marginBottom: 24, background: C.surface, borderRadius: 10, padding: 4, border: `1px solid ${C.border}`, width: "fit-content" }}>
             {[
+              { id: "digest",    label: "📈 TrumpDex" },
               { id: "truth",     label: "📣 Truth Social" },
               { id: "live",      label: "📡 Live Feed" },
-              { id: "digest",    label: "📈 Daily Digest" },
               { id: "signals",   label: "📊 Signal Board" },
               { id: "companies", label: "🏢 Companies" },
               { id: "manual",    label: "📝 Manual Scan" },
@@ -654,7 +654,7 @@ export default function App() {
             <div className="fadein">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
                 <div>
-                  <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, letterSpacing: 2, color: C.text }}>DAILY STOCK DIGEST</div>
+                  <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 22, letterSpacing: 2, color: C.text }}>TRUMPDEX</div>
                   <div style={{ fontSize: 11, color: C.textMute, fontFamily: "monospace", marginTop: 4 }}>
                     Companies Trump has mentioned · First-mention price vs current price · Yahoo Finance data
                     {digestData?.generatedAt && <> · Updated {new Date(digestData.generatedAt).toLocaleTimeString()}</>}
@@ -839,7 +839,7 @@ export default function App() {
                 <div style={{ marginTop: 20 }}>
                   <AppearanceCard appearance={scanResult} />
                   {scanResult.hasSignals
-                    ? <div style={{ marginTop: 10, fontSize: 12, color: C.gold, fontFamily: "monospace" }}>✦ Stock prices recorded — check the Daily Digest tab</div>
+                    ? <div style={{ marginTop: 10, fontSize: 12, color: C.gold, fontFamily: "monospace" }}>✦ Stock prices recorded — check the TrumpDex tab</div>
                     : <div style={{ marginTop: 10, fontSize: 12, color: C.textMute, fontFamily: "monospace" }}>No market signals detected in this text.</div>
                   }
                 </div>
