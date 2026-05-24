@@ -978,13 +978,7 @@ app.get('/api/digest', async (req, res) => {
         ? store.signals.find(s => s.company === entry.company && s.appearanceId === postId)
         : null;
 
-      // Fall back to strongest signal if no signal exists for the first mention post
-      const fallback = !sig
-        ? store.signals.filter(s => s.company === entry.company)
-            .reduce((best, s) => (!best || Math.abs(s.score) > Math.abs(best.score) ? s : best), null)
-        : null;
-
-      const top = sig || fallback;
+      const top = sig || null;
       return { ...entry, topSignal: top ? { sentiment: top.sentiment, score: top.score, aiReason: top.aiReason || null, date: top.date || null } : null };
     });
 
