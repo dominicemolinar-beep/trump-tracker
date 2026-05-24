@@ -160,18 +160,20 @@ function AppearanceCard({ appearance, onDelete }) {
   );
 }
 
-function TruthPostCard({ post }) {
-  const [open, setOpen] = useState(false);
+function TruthPostCard({ post, highlight }) {
+  const [open, setOpen] = useState(highlight || false);
   const hasSignals = post.signals && post.signals.length > 0;
   const topSig = post.signals?.[0];
   const cfg = topSig ? (SENTIMENT_CFG[topSig.sentiment] || SENTIMENT_CFG.NEUTRAL) : null;
 
   return (
-    <div style={{
-      background: C.surface,
-      border: `1px solid ${cfg ? cfg.color + "33" : C.border}`,
-      borderLeft: `3px solid ${cfg ? cfg.color : C.borderLt}`,
+    <div id={`post-${post.id}`} style={{
+      background: highlight ? C.raised : C.surface,
+      border: `1px solid ${highlight ? C.gold : cfg ? cfg.color + "33" : C.border}`,
+      borderLeft: `3px solid ${highlight ? C.gold : cfg ? cfg.color : C.borderLt}`,
       borderRadius: 10, padding: "14px 18px", marginBottom: 10, cursor: hasSignals ? "pointer" : "default",
+      boxShadow: highlight ? `0 0 0 2px ${C.gold}44` : "none",
+      transition: "box-shadow 0.3s",
     }} onClick={() => hasSignals && setOpen(!open)}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -240,7 +242,7 @@ function TruthPostCard({ post }) {
   );
 }
 
-function DigestRow({ entry, rank }) {
+function DigestRow({ entry, rank, onNavigate }) {
   const isUp = entry.direction === "up";
   const noData = entry.pctChange === null;
 
@@ -303,12 +305,12 @@ function DigestRow({ entry, rank }) {
       </div>
       <div style={{ fontSize: 11, fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingLeft: 12 }}>
         {entry.firstMentionUrl
-          ? <a href={entry.firstMentionUrl} target="_blank" rel="noreferrer"
+          ? <span onClick={() => onNavigate && onNavigate(entry.firstMentionUrl)}
                style={{ color: C.gold, textDecoration: "none", cursor: "pointer" }}
-               onMouseEnter={e => e.target.style.textDecoration = "underline"}
-               onMouseLeave={e => e.target.style.textDecoration = "none"}>
+               onMouseEnter={e => e.currentTarget.style.textDecoration = "underline"}
+               onMouseLeave={e => e.currentTarget.style.textDecoration = "none"}>
               {entry.firstMentionSpeech || entry.firstMentionUrl}
-            </a>
+            </span>
           : <span style={{ color: C.textMute }}>{entry.firstMentionSpeech}</span>
         }
       </div>
@@ -373,6 +375,23 @@ export default function App() {
   const [truthSubTab, setTruthSubTab] = useState("feed");
   const [taggedPosts, setTaggedPosts] = useState([]);
   const [taggedLoading, setTaggedLoading] = useState(false);
+  const [highlightPostId, setHighlightPostId] = useState(null);
+
+  function navigateToPost(url) {
+    // Extract Truth Social post ID from URL, e.g. .../realDonaldTrump/115670577719463498
+    const match = url && url.match(/\/(\d{15,})$/);
+    const postId = match ? `ts_${match[1]}` : null;
+    setActiveTab("truth");
+    setTruthSubTab("tagged");
+    if (postId) {
+      setHighlightPostId(postId);
+      // Scroll after render
+      setTimeout(() => {
+        const el = document.getElementById(`post-${postId}`);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 300);
+    }
+  }
 
   const fetchTruthPosts = useCallback(async () => {
     setTruthLoading(true);
@@ -623,7 +642,7 @@ export default function App() {
                       <div style={{ fontSize: 12, color: C.textFaint, marginTop: 8 }}>Posts where Trump mentions companies will appear here and be saved permanently</div>
                     </div>
                   )}
-                  {taggedPosts.map(post => <TruthPostCard key={post.id} post={post} />)}
+                  {taggedPosts.map(post => <TruthPostCard key={post.id} post={post} highlight={post.id === highlightPostId} />)}
                 </div>
               )}
 
@@ -679,7 +698,7 @@ export default function App() {
                     ))}
                   </div>
                   {digestData.entries.map((entry, i) => (
-                    <DigestRow key={entry.company} entry={entry} rank={i + 1} />
+                    <DigestRow key={entry.company} entry={entry} rank={i + 1} onNavigate={navigateToPost} />
                   ))}
                   <div style={{ padding: "12px 20px", borderTop: `1px solid ${C.border}`, display: "flex", gap: 20, alignItems: "center" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
