@@ -493,7 +493,7 @@ export default function App() {
         {/* ── Header ── */}
         <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "18px 32px" }}>
           <div style={{ maxWidth: 1300, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, cursor: "pointer" }} onClick={() => setActiveTab("digest")}>
               <div style={{ width: 42, height: 42, borderRadius: 8, background: `linear-gradient(135deg,${C.gold},#8a6e10)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, boxShadow: `0 0 16px ${C.gold}44` }}>🎙️</div>
               <div>
                 <div style={{ fontFamily: "'Bebas Neue',sans-serif", fontSize: 26, letterSpacing: 3, color: C.text, lineHeight: 1 }}>TRUMP SIGNAL TRACKER</div>
