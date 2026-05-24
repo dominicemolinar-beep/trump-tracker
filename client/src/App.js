@@ -659,6 +659,18 @@ export default function App() {
                     Companies Trump has mentioned · First-mention price vs current price · Yahoo Finance data
                     {digestData?.generatedAt && <> · Updated {new Date(digestData.generatedAt).toLocaleTimeString()}</>}
                   </div>
+                  {digestData?.entries && (() => {
+                    const valid = digestData.entries.filter(e => e.pctChange !== null);
+                    if (!valid.length) return null;
+                    const avg = valid.reduce((s, e) => s + e.pctChange, 0) / valid.length;
+                    const color = avg >= 0 ? "#4ade80" : "#ef4444";
+                    return (
+                      <div style={{ fontSize: 12, fontFamily: "monospace", marginTop: 6, color: C.textMute }}>
+                        TrumpDex avg return: <span style={{ color, fontWeight: 600 }}>{avg >= 0 ? "+" : ""}{avg.toFixed(1)}%</span>
+                        <span style={{ color: C.textMute, marginLeft: 6 }}>across {valid.length} companies</span>
+                      </div>
+                    );
+                  })()}
                 </div>
                 <button onClick={loadDigest} disabled={digestLoading} style={{
                   padding: "8px 18px", borderRadius: 7, border: `1px solid ${C.gold}`,
