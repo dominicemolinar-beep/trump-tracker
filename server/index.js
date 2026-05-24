@@ -761,14 +761,16 @@ app.post('/api/backfill', async (req, res) => {
         store.seenTruthIds.add(id);
         store.truthPosts.push(post);
 
-        // Save if any signal is non-NEUTRAL (all mentions classify, but only save meaningful ones)
+        // Always record mention URL for all companies (so digest speech links populate)
+        for (const sig of signals) {
+          await recordMention(sig.company, date, text.slice(0, 80), postUrl);
+        }
+
+        // Save to DB only if any signal is non-NEUTRAL
         const meaningfulSignals = signals.filter(s => s.sentiment !== "NEUTRAL");
         if (meaningfulSignals.length > 0) {
           totalSignals++;
           await saveSignalPost(post);
-          for (const sig of meaningfulSignals) {
-            await recordMention(sig.company, date, text.slice(0, 80), postUrl);
-          }
         }
       }
 
