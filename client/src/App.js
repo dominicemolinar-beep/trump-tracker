@@ -331,7 +331,7 @@ function Tab({ id, label, active, onClick, disabled }) {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState("truth");
+  const [activeTab, setActiveTab] = useState("digest");
   const [manualText, setManualText] = useState("");
   const [manualUrl, setManualUrl] = useState("");
   const [manualDate, setManualDate] = useState("");
