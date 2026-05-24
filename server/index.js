@@ -741,10 +741,20 @@ app.post('/api/backfill', async (req, res) => {
         totalScanned++;
         const id = p.id || `trump_${p.platformId}`;
 
-        if (store.seenTruthIds.has(id)) continue;
-
         const date = p.createdAt.split("T")[0];
         const postUrl = p.platformId ? `https://truthsocial.com/@realDonaldTrump/${p.platformId}` : `https://trump.fm/post/${id}`;
+
+        if (store.seenTruthIds.has(id)) {
+          // Already processed — just backfill any missing URLs (no Claude needed)
+          const mentionedCompanies = detectMentionedCompanies(text);
+          for (const company of mentionedCompanies) {
+            if (mentionPriceStore[company] && !mentionPriceStore[company].firstMentionUrl) {
+              await recordMention(company, date, text.slice(0, 80), postUrl);
+            }
+          }
+          continue;
+        }
+
         const mentionedCompanies = detectMentionedCompanies(text);
         if (!mentionedCompanies.length) continue;
         const signals = await classifySignalsWithClaude(text, mentionedCompanies);
