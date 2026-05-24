@@ -145,14 +145,17 @@ async function recordMention(company, date, speechTitle, url) {
       ? (await fetchPriceOnDate(ticker, date)) || (await fetchCurrentPrice(ticker))
       : await fetchCurrentPrice(ticker);
     mentionPriceStore[company] = {
-      ticker,
-      company,
+      ticker, company,
       firstMentionDate: date,
       firstMentionSpeech: speechTitle,
       firstMentionPrice: price,
       firstMentionUrl: url || null,
     };
     console.log(`  💰 First mention: ${company} (${ticker}) on ${date} @ $${price}`);
+    await saveMentionPrice(mentionPriceStore[company]);
+  } else if (url && !mentionPriceStore[company].firstMentionUrl) {
+    // Company already tracked but URL was never saved — backfill it
+    mentionPriceStore[company].firstMentionUrl = url;
     await saveMentionPrice(mentionPriceStore[company]);
   }
 }
