@@ -327,7 +327,7 @@ async function scrapeTruthSocial() {
             date,
             ...sig,
           });
-          await recordMention(sig.company, date, text.slice(0, 80));
+          await recordMention(sig.company, date, text.slice(0, 80), post.url || `https://truthsocial.com/@realDonaldTrump/${post.id}`);
         }
       }
 
@@ -420,7 +420,7 @@ async function pollForNewTranscripts() {
         date,
         ...sig,
       });
-      await recordMention(sig.company, date, item.title);
+      await recordMention(sig.company, date, item.title, item.url);
     }
 
     console.log(`  ✓ Processed "${item.title}" — ${signals.length} signals`);
@@ -692,7 +692,7 @@ app.get('/api/truthsocial/proxy', async (req, res) => {
       store.seenTruthIds.add(post.id);
       store.truthPosts.unshift(post);
       for (const sig of post.signals) {
-        await recordMention(sig.company, post.date, post.text.slice(0, 80));
+        await recordMention(sig.company, post.date, post.text.slice(0, 80), post.url);
         const sigId = `sig_ts_${post.id}_${sig.company}`;
         if (!store.signals.find(s => s.id === sigId)) {
           store.signals.unshift({ id: sigId, appearanceId: post.id, appearanceTitle: post.text.slice(0, 80), date: post.date, source: "Truth Social", ...sig });
@@ -767,7 +767,7 @@ app.post('/api/backfill', async (req, res) => {
           totalSignals++;
           await saveSignalPost(post);
           for (const sig of meaningfulSignals) {
-            await recordMention(sig.company, date, text.slice(0, 80));
+            await recordMention(sig.company, date, text.slice(0, 80), postUrl);
           }
         }
       }
@@ -878,7 +878,7 @@ app.post('/api/debug/reprice', async (req, res) => {
   for (const post of posts) {
     const signals = detectSignals(post.text);
     for (const sig of signals) {
-      await recordMention(sig.company, post.date, post.text.slice(0, 80));
+      await recordMention(sig.company, post.date, post.text.slice(0, 80), post.url);
     }
   }
   console.log(`[Reprice] Done — repriced ${posts.length} posts`);

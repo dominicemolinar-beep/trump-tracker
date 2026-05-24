@@ -301,8 +301,16 @@ function DigestRow({ entry, rank }) {
           : <span style={{ color: C.textFaint, fontSize: 11, fontFamily: "monospace" }}>–</span>
         }
       </div>
-      <div style={{ fontSize: 11, color: C.textMute, fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingLeft: 12 }}>
-        {entry.firstMentionSpeech}
+      <div style={{ fontSize: 11, fontFamily: "monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", paddingLeft: 12 }}>
+        {entry.firstMentionUrl
+          ? <a href={entry.firstMentionUrl} target="_blank" rel="noreferrer"
+               style={{ color: C.gold, textDecoration: "none", cursor: "pointer" }}
+               onMouseEnter={e => e.target.style.textDecoration = "underline"}
+               onMouseLeave={e => e.target.style.textDecoration = "none"}>
+              {entry.firstMentionSpeech || entry.firstMentionUrl}
+            </a>
+          : <span style={{ color: C.textMute }}>{entry.firstMentionSpeech}</span>
+        }
       </div>
     </div>
   );

@@ -45,9 +45,12 @@ async function initDb() {
       first_mention_date TEXT NOT NULL,
       first_mention_speech TEXT,
       first_mention_price NUMERIC,
+      first_mention_url TEXT,
       stored_at TIMESTAMPTZ DEFAULT NOW()
     );
   `);
+  // Add url column if upgrading from older schema
+  await db.query(`ALTER TABLE mention_prices ADD COLUMN IF NOT EXISTS first_mention_url TEXT`);
 
   console.log("[DB] Tables ready.");
 }
@@ -90,11 +93,12 @@ async function saveMentionPrice(record) {
   if (!db) return;
   try {
     await db.query(`
-      INSERT INTO mention_prices (company, ticker, first_mention_date, first_mention_speech, first_mention_price)
-      VALUES ($1,$2,$3,$4,$5)
+      INSERT INTO mention_prices (company, ticker, first_mention_date, first_mention_speech, first_mention_price, first_mention_url)
+      VALUES ($1,$2,$3,$4,$5,$6)
       ON CONFLICT (company) DO UPDATE SET
-        first_mention_price = COALESCE(EXCLUDED.first_mention_price, mention_prices.first_mention_price)
-    `, [record.company, record.ticker, record.firstMentionDate, record.firstMentionSpeech || null, record.firstMentionPrice || null]);
+        first_mention_price = COALESCE(EXCLUDED.first_mention_price, mention_prices.first_mention_price),
+        first_mention_url = COALESCE(EXCLUDED.first_mention_url, mention_prices.first_mention_url)
+    `, [record.company, record.ticker, record.firstMentionDate, record.firstMentionSpeech || null, record.firstMentionPrice || null, record.firstMentionUrl || null]);
   } catch (e) {
     console.error("[DB] saveMentionPrice error:", e.message);
   }
@@ -109,6 +113,7 @@ async function loadMentionPrices() {
       company: r.company, ticker: r.ticker,
       firstMentionDate: r.first_mention_date, firstMentionSpeech: r.first_mention_speech,
       firstMentionPrice: r.first_mention_price ? Number(r.first_mention_price) : null,
+      firstMentionUrl: r.first_mention_url || null,
     }));
   } catch (e) {
     console.error("[DB] loadMentionPrices error:", e.message);

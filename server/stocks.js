@@ -135,9 +135,9 @@ async function fetchPriceOnDate(ticker, dateStr) {
  * Called when a company is mentioned in a speech.
  * Records first-mention price if this is the first time we've seen this company.
  */
-async function recordMention(company, date, speechTitle) {
+async function recordMention(company, date, speechTitle, url) {
   const ticker = TICKER_MAP[company];
-  if (!ticker) return; // No ticker for this company (e.g. SpaceX, OpenAI)
+  if (!ticker) return;
 
   if (!mentionPriceStore[company]) {
     const isHistorical = date && new Date(date) < new Date(Date.now() - 86400 * 1000);
@@ -150,6 +150,7 @@ async function recordMention(company, date, speechTitle) {
       firstMentionDate: date,
       firstMentionSpeech: speechTitle,
       firstMentionPrice: price,
+      firstMentionUrl: url || null,
     };
     console.log(`  💰 First mention: ${company} (${ticker}) on ${date} @ $${price}`);
     await saveMentionPrice(mentionPriceStore[company]);
@@ -181,6 +182,7 @@ async function buildDailyDigest() {
       ticker: record.ticker,
       firstMentionDate: record.firstMentionDate,
       firstMentionSpeech: record.firstMentionSpeech,
+      firstMentionUrl: record.firstMentionUrl || null,
       firstMentionPrice: record.firstMentionPrice,
       currentPrice,
       pctChange: pctChange !== null ? Number(pctChange.toFixed(2)) : null,
