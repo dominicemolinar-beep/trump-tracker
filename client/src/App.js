@@ -297,7 +297,8 @@ function DigestRow({ entry, rank, onNavigate }) {
       </div>
       <div>
         {sig
-          ? <span style={{ background: sig.bg, color: sig.color, border: `1px solid ${sig.color}33`, borderRadius: 6, padding: "3px 8px", fontFamily: "monospace", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>
+          ? <span title={entry.topSignal.aiReason ? `${entry.topSignal.date ? entry.topSignal.date + ': ' : ''}${entry.topSignal.aiReason}` : undefined}
+                 style={{ background: sig.bg, color: sig.color, border: `1px solid ${sig.color}33`, borderRadius: 6, padding: "3px 8px", fontFamily: "monospace", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap", cursor: "help" }}>
               {sig.icon} {sig.label}
             </span>
           : <span style={{ color: C.textFaint, fontSize: 11, fontFamily: "monospace" }}>–</span>

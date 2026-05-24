@@ -972,7 +972,7 @@ app.get('/api/digest', async (req, res) => {
     const enriched = digest.map(entry => {
       const sigs = store.signals.filter(s => s.company === entry.company);
       const top = sigs.reduce((best, s) => (!best || Math.abs(s.score) > Math.abs(best.score) ? s : best), null);
-      return { ...entry, topSignal: top ? { sentiment: top.sentiment, score: top.score } : null };
+      return { ...entry, topSignal: top ? { sentiment: top.sentiment, score: top.score, aiReason: top.aiReason || null, date: top.date || null } : null };
     });
 
     res.json({ generatedAt: new Date().toISOString(), entries: enriched });
