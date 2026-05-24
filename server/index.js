@@ -66,7 +66,60 @@ const KNOWN_COMPANIES = [
   "OpenAI", "SpaceX", "X Corp", "Twitter",
 ];
 
-// ─── Signal detection engine ────────────────────────────────────────────────
+// ─── Step 1: Detect company mentions (broad net, no scoring) ─────────────────
+function detectMentionedCompanies(text) {
+  const lowerText = text.toLowerCase();
+  return KNOWN_COMPANIES.filter(company => {
+    const escaped = company.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`\\b${escaped}\\b`).test(lowerText);
+  });
+}
+
+// ─── Step 2: Claude classifies the signal type for each mentioned company ─────
+// Every mention is a signal — Claude's job is to determine what KIND, not whether.
+async function classifySignalsWithClaude(postText, companies) {
+  if (!ANTHROPIC_API_KEY || !companies.length) {
+    return companies.map(c => ({ company: c, sentiment: "NEUTRAL", score: 0, hits: [], aiReason: null }));
+  }
+  try {
+    const msg = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 600,
+      messages: [{
+        role: "user",
+        content: `You are a financial analyst reading Trump's Truth Social posts to classify market signals.
+
+Post: "${postText.slice(0, 800)}"
+
+Companies mentioned: ${companies.join(", ")}
+
+For EACH company, classify the market signal Trump is sending — even indirect or neutral mentions count.
+Consider: is he praising, criticizing, warning about, or just referencing the company?
+
+Sentiments: STRONG_BUY (explicit buy recommendation), BUY (strong praise/endorsement), POSITIVE (favorable mention), NEUTRAL (factual/passing reference), NEGATIVE (criticism), AVOID (strong warning or attack).
+
+Reply with JSON array only:
+[{"company":"Name","sentiment":"SENTIMENT","score":5,"reason":"one sentence explaining the signal"}]
+
+Score guide: STRONG_BUY=+10, BUY=+7, POSITIVE=+4, NEUTRAL=0, NEGATIVE=-5, AVOID=-9`
+      }]
+    });
+
+    const raw = msg.content[0].text.trim().replace(/^```json\n?/, "").replace(/\n?```$/, "");
+    const parsed = JSON.parse(raw);
+
+    return companies.map(company => {
+      const a = parsed.find(p => p.company === company);
+      if (!a) return { company, sentiment: "NEUTRAL", score: 0, hits: [], aiReason: null };
+      return { company, sentiment: a.sentiment || "NEUTRAL", score: a.score || 0, hits: [], aiReason: a.reason || null };
+    });
+  } catch (e) {
+    console.error(`[Claude classify] ${e.message}`);
+    return companies.map(c => ({ company: c, sentiment: "NEUTRAL", score: 0, hits: [], aiReason: null }));
+  }
+}
+
+// ─── detectSignals: used for speeches/manual scan (keyword scoring) ───────────
 function detectSignals(text) {
   const results = [];
   const lowerText = text.toLowerCase();
@@ -83,24 +136,12 @@ function detectSignals(text) {
     sentences.forEach((sentence) => {
       const lowerSentence = sentence.toLowerCase();
       if (!lowerSentence.includes(lowerCompany)) return;
-
-      // Phrases where a negative word refers to a political figure, not a company
-      const POLITICAL_NOISE = [
-        "crooked joe", "crooked hillary", "crooked biden", "crooked obama",
-        "sleepy joe", "sleepy/crooked", "crooked/sleepy", "failing new york times",
-        "failing nyt", "fake news", "corrupt media", "corrupt press",
-        "disaster of a president", "disaster joe", "terrible president",
-        "horrible president", "do not buy fake",
-      ];
-      const hasPoliticalNoise = POLITICAL_NOISE.some(p => lowerSentence.includes(p));
-
       SIGNAL_PATTERNS.forEach(({ type, patterns, weight }) => {
         patterns.forEach((pattern) => {
-          if (!lowerSentence.includes(pattern)) return;
-          // Skip negative patterns that are part of a political nickname/phrase
-          if (weight < 0 && hasPoliticalNoise) return;
-          score += weight;
-          hits.push({ type, pattern, quote: sentence.trim() });
+          if (lowerSentence.includes(pattern)) {
+            score += weight;
+            hits.push({ type, pattern, quote: sentence.trim() });
+          }
         });
       });
     });
@@ -112,59 +153,11 @@ function detectSignals(text) {
       else if (score > 0) sentiment = "POSITIVE";
       else if (score <= -9) sentiment = "AVOID";
       else if (score < 0) sentiment = "NEGATIVE";
-
       results.push({ company, score, sentiment, hits });
     }
   });
 
   return results.sort((a, b) => b.score - a.score);
-}
-
-// ─── Claude signal verification for Truth Social posts ───────────────────────
-// Takes keyword-detected signals and verifies each one, corrects sentiment, adds reason.
-// Returns only genuine signals. Makes ONE Claude call regardless of company count.
-async function verifySignalsWithClaude(postText, signals) {
-  if (!ANTHROPIC_API_KEY || !signals.length) return signals;
-  try {
-    const companiesList = signals.map(s => `${s.company} (keyword: ${s.sentiment})`).join(", ");
-    const msg = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
-      max_tokens: 500,
-      messages: [{
-        role: "user",
-        content: `You are a financial analyst reviewing Trump Truth Social posts for genuine stock market signals.
-
-Post: "${postText.slice(0, 800)}"
-
-Keyword scanner flagged these companies: ${companiesList}
-
-For each company:
-1. Is the post genuinely expressing sentiment about that company as a business/stock? (Could be a false positive if the company name appears coincidentally or the negative word is about a politician.)
-2. What is the correct market sentiment: STRONG_BUY, BUY, POSITIVE, NEUTRAL, NEGATIVE, AVOID, or NONE (if not a real signal)?
-3. One short sentence explaining why.
-
-Reply with a JSON array only, no other text:
-[{"company":"Name","genuine":true,"sentiment":"SENTIMENT","reason":"..."}]`
-      }]
-    });
-
-    let parsed;
-    try {
-      const raw = msg.content[0].text.trim().replace(/^```json\n?/, "").replace(/\n?```$/, "");
-      parsed = JSON.parse(raw);
-    } catch {
-      return signals;
-    }
-
-    return signals.map(sig => {
-      const analysis = parsed.find(a => a.company === sig.company);
-      if (!analysis || !analysis.genuine || analysis.sentiment === "NONE") return null;
-      return { ...sig, sentiment: analysis.sentiment, aiReason: analysis.reason };
-    }).filter(Boolean);
-  } catch (e) {
-    console.error(`[Claude verify] ${e.message}`);
-    return signals.map(s => ({ ...s, aiReason: null }));
-  }
 }
 
 // ─── Claude AI analysis ──────────────────────────────────────────────────────
@@ -666,8 +659,8 @@ app.get('/api/truthsocial/proxy', async (req, res) => {
       const url = p.platformId
         ? `https://truthsocial.com/@realDonaldTrump/${p.platformId}`
         : `https://trump.fm/post/${id}`;
-      const rawSignals = detectSignals(text);
-      const signals = rawSignals.length > 0 ? await verifySignalsWithClaude(text, rawSignals) : [];
+      const mentionedCompanies = detectMentionedCompanies(text);
+      const signals = mentionedCompanies.length > 0 ? await classifySignalsWithClaude(text, mentionedCompanies) : [];
 
       posts.push({
         id,
@@ -752,9 +745,9 @@ app.post('/api/backfill', async (req, res) => {
 
         const date = p.createdAt.split("T")[0];
         const postUrl = p.platformId ? `https://truthsocial.com/@realDonaldTrump/${p.platformId}` : `https://trump.fm/post/${id}`;
-        const rawSignals = detectSignals(text);
-        if (!rawSignals.length) continue;
-        const signals = await verifySignalsWithClaude(text, rawSignals);
+        const mentionedCompanies = detectMentionedCompanies(text);
+        if (!mentionedCompanies.length) continue;
+        const signals = await classifySignalsWithClaude(text, mentionedCompanies);
 
         const post = {
           id, text, date, createdAt: p.createdAt,
@@ -768,10 +761,12 @@ app.post('/api/backfill', async (req, res) => {
         store.seenTruthIds.add(id);
         store.truthPosts.push(post);
 
-        if (signals.length > 0) {
+        // Save if any signal is non-NEUTRAL (all mentions classify, but only save meaningful ones)
+        const meaningfulSignals = signals.filter(s => s.sentiment !== "NEUTRAL");
+        if (meaningfulSignals.length > 0) {
           totalSignals++;
           await saveSignalPost(post);
-          for (const sig of signals) {
+          for (const sig of meaningfulSignals) {
             await recordMention(sig.company, date, text.slice(0, 80));
           }
         }
