@@ -968,10 +968,23 @@ app.get('/api/digest', async (req, res) => {
   try {
     const digest = await buildDailyDigest();
 
-    // Enrich each entry with the top signal sentiment for that company
+    // Enrich each entry with the signal from the first mention post specifically
     const enriched = digest.map(entry => {
-      const sigs = store.signals.filter(s => s.company === entry.company);
-      const top = sigs.reduce((best, s) => (!best || Math.abs(s.score) > Math.abs(best.score) ? s : best), null);
+      // Extract post ID from firstMentionUrl (e.g. https://truthsocial.com/@realDonaldTrump/114200244380161257)
+      const urlMatch = entry.firstMentionUrl && entry.firstMentionUrl.match(/\/(\d{10,})$/);
+      const postId = urlMatch ? `ts_${urlMatch[1]}` : null;
+
+      const sig = postId
+        ? store.signals.find(s => s.company === entry.company && s.appearanceId === postId)
+        : null;
+
+      // Fall back to strongest signal if no signal exists for the first mention post
+      const fallback = !sig
+        ? store.signals.filter(s => s.company === entry.company)
+            .reduce((best, s) => (!best || Math.abs(s.score) > Math.abs(best.score) ? s : best), null)
+        : null;
+
+      const top = sig || fallback;
       return { ...entry, topSignal: top ? { sentiment: top.sentiment, score: top.score, aiReason: top.aiReason || null, date: top.date || null } : null };
     });
 
