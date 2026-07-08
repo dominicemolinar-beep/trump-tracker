@@ -491,6 +491,11 @@ export default function App() {
       `}</style>
 
       <div style={{ minHeight: "100vh", background: C.bg }}>
+        {/* ── Hero banner ── */}
+        <div style={{ position: "relative", height: 220, backgroundImage: "url(/hero-vox.jpg)", backgroundSize: "cover", backgroundPosition: "center 22%" }}>
+          <div style={{ position: "absolute", inset: 0, background: `linear-gradient(180deg, ${C.bg}66 0%, ${C.bg}22 45%, ${C.surface} 100%)` }} />
+        </div>
+
         {/* ── Header ── */}
         <div style={{ background: C.surface, borderBottom: `1px solid ${C.border}`, padding: "18px 32px" }}>
           <div style={{ maxWidth: 1300, margin: "0 auto", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
