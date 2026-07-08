@@ -706,7 +706,8 @@ export default function App() {
               )}
 
               {digestData?.entries && digestData.entries.length > 0 && (
-                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: "hidden" }}>
+                <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflowX: "auto" }}>
+                  <div style={{ minWidth: 900 }}>
                   <div style={{
                     display: "grid", gridTemplateColumns: "36px 140px 80px 120px 120px 130px 110px 1fr",
                     gap: 0, padding: "10px 20px", background: C.bg, borderBottom: `1px solid ${C.border}`,
@@ -730,6 +731,7 @@ export default function App() {
                     <div style={{ fontSize: 11, color: C.textFaint, marginLeft: "auto" }}>
                       Prices delayed 15–20 min · Not financial advice
                     </div>
+                  </div>
                   </div>
                 </div>
               )}
